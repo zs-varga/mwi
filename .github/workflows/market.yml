@@ -1,9 +1,10 @@
 name: save-market-data
 
 on:
-  schedule:
-    - cron: "15 * * * *"   # every hour at XX:15 UTC (the game publishes at XX:06)
-  workflow_dispatch:       # manual run; also rebuilds and re-uploads the database
+  # Started every hour at XX:15 UTC by the Cloudflare Worker "mwi-cron" (it calls the workflow_dispatch API),
+  # because GitHub's own schedule trigger has been unreliable.  You can also start it by hand.
+  # Each run saves the snapshot if the data changed and re-uploads the database.
+  workflow_dispatch:
 
 permissions:
   contents: write          # push snapshots, create/update the release
