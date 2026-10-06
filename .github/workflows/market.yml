@@ -2,7 +2,7 @@ name: save-market-data
 
 on:
   schedule:
-    - cron: "17 */6 * * *"
+    - cron: "15 * * * *"   # every hour at XX:15 UTC (the game publishes at XX:06)
   workflow_dispatch:
 
 permissions:
@@ -12,16 +12,33 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Download market data
+      - name: Download market data and save it if it changed
         run: |
-          curl -sSL -A "Mozilla/5.0" https://www.milkywayidle.com/game_data/marketplace.json -o m.json
-          ts=$(python3 -c "import json;print(json.load(open('m.json'))['timestamp'])")
-          mkdir -p snapshots
-          if [ ! -f snapshots/marketplace_$ts.json.gz ]; then
-            gzip -c m.json > snapshots/marketplace_$ts.json.gz
-          fi
+          curl -sSfL -A "Mozilla/5.0" https://www.milkywayidle.com/game_data/marketplace.json -o m.json
+          python3 - <<'PY'
+          import glob, gzip, json, os, shutil
+
+          new = json.load(open("m.json"))
+          os.makedirs("snapshots", exist_ok=True)
+
+          # compare the market data itself (not the timestamp) with the newest saved snapshot
+          files = sorted(glob.glob("snapshots/marketplace_*.json.gz"))
+          if files:
+              last = json.load(gzip.open(files[-1]))
+              if last["marketData"] == new["marketData"]:
+                  print("market data unchanged since", files[-1], "- not saving")
+                  raise SystemExit(0)
+
+          dest = f"snapshots/marketplace_{new['timestamp']}.json.gz"
+          if os.path.exists(dest):
+              print(dest, "already exists - not saving")
+              raise SystemExit(0)
+          with open("m.json", "rb") as src, gzip.open(dest, "wb") as out:
+              shutil.copyfileobj(src, out)
+          print("saved", dest)
+          PY
           rm m.json
 
       - name: Commit and push
