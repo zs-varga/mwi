@@ -86,4 +86,11 @@ jobs:
           gh release view "$RELEASE_TAG" > /dev/null 2>&1 || gh release create "$RELEASE_TAG" \
             --title "Market history database" \
             --notes "market.db.gz: SQLite price history (delta format, see history_db.py). Rebuilt hourly by the workflow."
-          gh release upload "$RELEASE_TAG" "$DB_ASSET" --clobber
+          # GitHub's upload endpoint sometimes answers with a 5xx (e.g. 502); --clobber deletes the old asset first,
+          # so a failed upload would leave the release without a database.  Retry a few times before giving up.
+          for attempt in 1 2 3 4; do
+            if gh release upload "$RELEASE_TAG" "$DB_ASSET" --clobber; then break; fi
+            if [ "$attempt" = 4 ]; then echo "upload failed 4 times"; exit 1; fi
+            echo "upload failed (attempt $attempt), retrying in $((attempt * 15)) s"
+            sleep $((attempt * 15))
+          done
