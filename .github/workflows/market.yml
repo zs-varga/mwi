@@ -1,0 +1,35 @@
+name: save-market-data
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download market data
+        run: |
+          curl -sSL -A "Mozilla/5.0" https://www.milkywayidle.com/game_data/marketplace.json -o m.json
+          ts=$(python3 -c "import json;print(json.load(open('m.json'))['timestamp'])")
+          mkdir -p snapshots
+          if [ ! -f snapshots/marketplace_$ts.json.gz ]; then
+            gzip -c m.json > snapshots/marketplace_$ts.json.gz
+          fi
+          rm m.json
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add snapshots
+          if ! git diff --cached --quiet; then
+            git commit -m "market snapshot"
+            git push
+          fi
