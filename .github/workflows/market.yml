@@ -5,6 +5,13 @@ on:
   # because GitHub's own schedule trigger has been unreliable.  You can also start it by hand.
   # Each run saves the snapshot if the data changed and re-uploads the database.
   workflow_dispatch:
+    inputs:
+      source:
+        description: "who started this run (the Worker sends 'cloudflare')"
+        required: false
+        default: "manual"
+
+run-name: "save-market-data (${{ inputs.source || 'manual' }})"
 
 permissions:
   contents: write          # push snapshots, create/update the release
