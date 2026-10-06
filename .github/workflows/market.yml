@@ -3,10 +3,18 @@ name: save-market-data
 on:
   schedule:
     - cron: "15 * * * *"   # every hour at XX:15 UTC (the game publishes at XX:06)
-  workflow_dispatch:
+  workflow_dispatch:       # manual run; also rebuilds and re-uploads the database
 
 permissions:
-  contents: write
+  contents: write          # push snapshots, create/update the release
+
+concurrency:
+  group: market-data       # never let two runs overlap (they would race on the push and the upload)
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: market-history
+  DB_ASSET: market.db.gz
 
 jobs:
   fetch:
@@ -41,12 +49,33 @@ jobs:
           PY
           rm m.json
 
-      - name: Commit and push
+      - name: Commit and push the snapshot
+        id: commit
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add snapshots
-          if ! git diff --cached --quiet; then
+          if git diff --cached --quiet; then
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+          else
             git commit -m "market snapshot"
+            git pull --rebase
             git push
+            echo "committed=true" >> "$GITHUB_OUTPUT"
           fi
+
+      # Keep the history database (release asset) up to date: download it, import any snapshot it
+      # does not have yet, upload it again.  Without an existing release it is built from all snapshots.
+      - name: Update the history database
+        if: steps.commit.outputs.committed == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$RELEASE_TAG" --pattern "$DB_ASSET" --clobber || echo "no database yet - building from scratch"
+          if [ -f "$DB_ASSET" ]; then gunzip -f "$DB_ASSET"; fi
+          python3 history_db.py --db market.db --snapshots snapshots
+          gzip -9 -f market.db
+          gh release view "$RELEASE_TAG" > /dev/null 2>&1 || gh release create "$RELEASE_TAG" \
+            --title "Market history database" \
+            --notes "market.db.gz: SQLite price history (delta format, see history_db.py). Rebuilt hourly by the workflow."
+          gh release upload "$RELEASE_TAG" "$DB_ASSET" --clobber
