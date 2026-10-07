@@ -15,6 +15,8 @@ run-name: "save-market-data (${{ inputs.source || 'manual' }})"
 
 permissions:
   contents: write          # push snapshots, create/update the release
+  pages: write             # publish the dashboard
+  id-token: write          # needed by actions/deploy-pages
 
 concurrency:
   group: market-data       # never let two runs overlap (they would race on the push and the upload)
@@ -94,3 +96,30 @@ jobs:
             echo "upload failed (attempt $attempt), retrying in $((attempt * 15)) s"
             sleep $((attempt * 15))
           done
+
+  # Publish the dashboard (market_watch/index.html) together with the latest database to GitHub Pages,
+  # so it can be watched at https://<user>.github.io/<repo>/ .  One-time setup: repo Settings > Pages >
+  # Source = "GitHub Actions".
+  pages:
+    needs: fetch
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Assemble the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir site
+          cp market_watch/index.html site/
+          gh release download "$RELEASE_TAG" --pattern "$DB_ASSET" --dir site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

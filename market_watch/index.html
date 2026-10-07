@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market Watch</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10); --wash: rgba(11,11,11,.05);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+  --up: #006300; --down: #d03b3b; --accent: #2a78d6;
+  --buy: #008300; --sell: #e34948;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19;
+    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10); --wash: rgba(255,255,255,.06);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+    --up: #0ca30c; --down: #d03b3b; --accent: #3987e5;
+    --buy: #008300; --sell: #e66767;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19;
+  --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10); --wash: rgba(255,255,255,.06);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+  --up: #0ca30c; --down: #d03b3b; --accent: #3987e5;
+  --buy: #008300; --sell: #e66767;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { padding: 0 16px 48px; }
+.wrap { max-width: 1180px; margin: 0 auto; }
+header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; padding: 22px 0 8px; }
+h1 { font-size: 20px; margin: 0; font-weight: 650; }
+.meta { color: var(--ink-2); font-size: 13px; flex: 1 1 260px; }
+button, select, input { font: inherit; color: var(--ink); }
+.btn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.btn:hover { background: var(--wash); }
+.btn.on { background: var(--wash); border-color: var(--ink-2); font-weight: 600; }
+.btn:focus-visible, select:focus-visible, input:focus-visible, th button:focus-visible, td button:focus-visible, svg:focus-visible
+  { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--grid); margin: 8px 0 14px; }
+.tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 14px; cursor: pointer; color: var(--ink-2); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; margin-bottom: 12px; }
+.filters label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--ink-2); }
+.filters select, .filters input { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; min-width: 120px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { background: var(--surface); border: 0; padding: 6px 12px; cursor: pointer; border-right: 1px solid var(--border); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--wash); font-weight: 600; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.summary { color: var(--ink-2); font-size: 13px; margin: 0 0 10px; }
+.note { color: var(--ink-2); font-size: 13px; background: var(--wash); border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child, th:nth-child(2), td.name { text-align: left; }
+th:first-child, td.star { width: 34px; padding-right: 0; }
+th { font-weight: 600; font-size: 12px; color: var(--ink-2); position: sticky; top: 0; background: var(--surface); }
+th button { background: none; border: 0; cursor: pointer; font: inherit; color: inherit; padding: 0; }
+th[aria-sort] button { color: var(--ink); }
+td.name button { background: none; border: 0; padding: 0; cursor: pointer; text-align: left; color: var(--ink); font-weight: 500; }
+td.name button:hover { text-decoration: underline; }
+td.star button { background: none; border: 0; cursor: pointer; font-size: 16px; color: var(--muted); line-height: 1; }
+td.star button[aria-pressed="true"] { color: var(--ink); }
+.up { color: var(--up); } .down { color: var(--down); } .flat { color: var(--muted); }
+.tablewrap { overflow-x: auto; max-height: 70vh; overflow-y: auto; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 10px 0 14px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; }
+.tile .l { font-size: 12px; color: var(--ink-2); }
+.tile .v { font-size: 22px; font-weight: 650; }
+.tile .d { font-size: 12px; }
+.charthead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 6px; }
+.charthead h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); }
+.hatch { display: inline-block; width: 14px; height: 10px; vertical-align: middle; margin-right: 6px; border-radius: 2px; border: 1px solid var(--axis);
+  background: repeating-linear-gradient(45deg, var(--axis) 0 1px, transparent 1px 4px); }
+.dash { display: inline-block; width: 18px; height: 0; border-top: 2px dashed var(--muted); vertical-align: middle; margin-right: 6px; opacity: .8; }
+.key { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.14); z-index: 5; white-space: nowrap; display: none; }
+.tip .t { color: var(--ink-2); margin-bottom: 4px; }
+.tip .r { display: flex; align-items: center; gap: 8px; }
+.tip .r b { font-size: 13px; }
+.tip .r span.n { color: var(--ink-2); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.wcard { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.wcard .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.wcard .nm { font-weight: 600; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+.wcard .nm:hover { text-decoration: underline; }
+.wcard .big { font-size: 22px; font-weight: 650; margin-top: 2px; }
+.wcard .sub { font-size: 12px; color: var(--ink-2); }
+.empty { padding: 36px 12px; text-align: center; color: var(--ink-2); }
+.drop { border: 2px dashed var(--axis); border-radius: 12px; padding: 36px 20px; text-align: center; color: var(--ink-2); }
+.drop.over { border-color: var(--accent); background: var(--wash); }
+.hidden { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (max-width: 640px) { body { padding: 0 10px 40px; } .filters label { flex: 1 1 140px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Market Watch</h1>
+  <div class="meta" id="meta">No data loaded.</div>
+  <button class="btn" id="open">Open data file…</button>
+  <button class="btn" id="theme" title="Switch between automatic, light and dark">Theme: auto</button>
+  <input type="file" id="file" accept=".db,.gz,.sqlite" class="hidden">
+</header>
+
+<div id="load" class="drop">
+  <p><strong>Load the market history database</strong></p>
+  <p>Drop <code>market.db.gz</code> (or <code>market.db</code>) here, or use “Open data file…”.<br>
+  If this page is served from the folder that holds the file, it loads automatically.</p>
+  <p id="loaderr" style="color:var(--down)"></p>
+</div>
+
+<main id="app" class="hidden">
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-movers" aria-selected="true">Movers</button>
+    <button class="tab" role="tab" id="tab-item" aria-selected="false">Item</button>
+    <button class="tab" role="tab" id="tab-watch" aria-selected="false">Watchlist</button>
+  </div>
+
+  <div class="filters" id="filters">
+    <label>Compare with
+      <select id="f-window">
+        <option value="prev">previous snapshot</option>
+        <option value="6h">6 hours ago</option>
+        <option value="24h" selected>24 hours ago</option>
+        <option value="7d">7 days ago</option>
+      </select></label>
+    <label>Enhancement level <select id="f-level"></select></label>
+    <label id="f-minvol-l">Min volume per hour <input id="f-minvol" type="number" min="0" step="10" value="100"></label>
+    <label id="f-search-l">Search <input id="f-search" type="search" placeholder="item name"></label>
+    <div id="f-dir-l"><div style="font-size:12px;color:var(--ink-2);margin-bottom:3px">Direction</div>
+      <div class="seg" role="group" aria-label="Direction">
+        <button data-dir="all" aria-pressed="true">All</button>
+        <button data-dir="up" aria-pressed="false">Up</button>
+        <button data-dir="down" aria-pressed="false">Down</button>
+      </div></div>
+  </div>
+  <div id="windownote"></div>
+
+  <section id="p-movers">
+    <p class="summary" id="summary"></p>
+    <div class="card"><div class="tablewrap"><table id="movers"><thead></thead><tbody></tbody></table></div>
+      <p class="summary" id="more" style="margin:10px 0 0"></p></div>
+  </section>
+
+  <section id="p-item" class="hidden">
+    <div class="filters">
+      <label>Item <input id="i-search" list="itemlist" placeholder="type an item name" autocomplete="off" style="min-width:260px"></label>
+      <datalist id="itemlist"></datalist>
+      <label>Level <select id="i-level"></select></label>
+      <div><div style="font-size:12px;color:var(--ink-2);margin-bottom:3px">Range</div>
+        <div class="seg" role="group" aria-label="Range" id="i-range">
+          <button data-r="24" aria-pressed="false">24 h</button>
+          <button data-r="168" aria-pressed="true">7 d</button>
+          <button data-r="720" aria-pressed="false">30 d</button>
+          <button data-r="0" aria-pressed="false">All</button>
+        </div></div>
+      <div><div style="font-size:12px;color:var(--ink-2);margin-bottom:3px">Trend window</div>
+        <div class="seg" role="group" aria-label="Trend window" id="i-trend">
+          <button data-w="6" aria-pressed="false">6 h</button>
+          <button data-w="24" aria-pressed="true">24 h</button>
+          <button data-w="168" aria-pressed="false">7 d</button>
+        </div></div>
+      <button class="btn" id="i-star" aria-pressed="false">☆ Watch</button>
+      <button class="btn" id="i-table" aria-pressed="false">Show table</button>
+    </div>
+    <div id="item-body"><div class="empty">Pick an item above, or click one in Movers.</div></div>
+  </section>
+
+  <section id="p-watch" class="hidden">
+    <div id="watch-body"></div>
+  </section>
+</main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+<script>
+"use strict";
+// ------------------------------------------------------------------ helpers
+const $ = (id) => document.getElementById(id);
+const el = (tag, props = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") n.className = v; else if (k === "text") n.textContent = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
+  }
+  for (const c of kids) if (c != null) n.append(c);
+  return n;
+};
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
+};
+const pretty = (hrid) => hrid.split("/").pop().split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+const fmt = (n) => {
+  if (n == null) return "—";
+  const a = Math.abs(n);
+  if (a >= 1e9) return (n / 1e9).toFixed(2).replace(/\.?0+$/, "") + "B";
+  if (a >= 1e7) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  if (a >= 1e5) return (n / 1e3).toFixed(0) + "K";
+  return Math.round(n).toLocaleString("en-US");
+};
+const full = (n) => (n == null ? "—" : Math.round(n).toLocaleString("en-US"));
+const pct = (a, b) => (a == null || b == null || b === 0 ? null : ((a - b) / b) * 100);
+const dtf = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const dtShort = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+const dtDay = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+const when = (ts) => dtf.format(new Date(ts * 1000));
+const ago = (secs) => {
+  if (secs < 5400) return Math.round(secs / 60) + " min";
+  if (secs < 172800) return (secs / 3600).toFixed(secs < 36000 ? 1 : 0).replace(/\.0$/, "") + " h";
+  return (secs / 86400).toFixed(1).replace(/\.0$/, "") + " d";
+};
+const bidOrNull = (v) => (v == null || v < 0 ? null : v); // -1 = no order
+
+// Volume swings are huge when the earlier hour had almost nothing, so: "new" when nothing traded before,
+// "no trades" when nothing trades now, a multiple (x3.4) from 3x up, "x100+" beyond that, and a percentage otherwise.  Exact figure in the tooltip.
+function volDeltaNode(r) {
+  if (r.volNew) return el("span", { class: "up", text: "▲ new", title: "traded now, no trades in the earlier hour" });
+  if (r.volGone) return el("span", { class: "down", text: "▼ no trades", title: "no trades now, traded in the earlier hour" });
+  const p = r.dVol;
+  if (p == null) return el("span", { class: "flat", text: "—" });
+  if (p >= 200) {
+    const x = 1 + p / 100;
+    return el("span", { class: "up", text: x >= 100 ? "▲ ×100+" : "▲ ×" + (x >= 10 ? Math.round(x) : x.toFixed(1)), title: "+" + Math.round(p).toLocaleString("en-US") + "%" });
+  }
+  return deltaNode(p);
+}
+function deltaNode(p) {
+  if (p == null) return el("span", { class: "flat", text: "—" });
+  if (Math.abs(p) < 0.005) return el("span", { class: "flat", text: "— 0%" });
+  const up = p > 0;
+  return el("span", { class: up ? "up" : "down", text: (up ? "▲ " : "▼ ") + Math.abs(p).toFixed(Math.abs(p) < 10 ? 1 : 0) + "%" });
+}
+
+// ------------------------------------------------------------------ data layer
+let SQL = null, db = null;
+const D = { snaps: [], items: new Map(), byName: new Map(), levels: [], names: [], latest: null };
+
+function rows(sql, params = []) {
+  const st = db.prepare(sql); st.bind(params);
+  const out = [];
+  while (st.step()) out.push(st.get());
+  st.free();
+  return out;
+}
+
+async function openDb(bytes) {
+  if (!SQL) SQL = await initSqlJs({ locateFile: (f) => "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/" + f });
+  if (db) db.close();
+  db = new SQL.Database(new Uint8Array(bytes));
+  D.snaps = rows("SELECT snapshot_id, ts FROM snapshot ORDER BY ts").map(([id, ts]) => ({ id, ts }));
+  if (!D.snaps.length) throw new Error("The database has no snapshots.");
+  D.items = new Map(rows("SELECT item_id, hrid FROM item").map(([id, h]) => [id, { id, hrid: h, name: pretty(h) }]));
+  D.byName = new Map([...D.items.values()].map((i) => [i.name, i]));
+  D.levels = rows("SELECT DISTINCT level FROM obs ORDER BY level").map((r) => r[0]);
+  D.latest = D.snaps[D.snaps.length - 1];
+  stateCache.clear(); histCache.clear();
+}
+
+const stateCache = new Map();
+function stateAt(snapId) { // Map "item|level" -> {ask,bid,price,volume}; unlisted items are absent
+  if (stateCache.has(snapId)) return stateCache.get(snapId);
+  const m = new Map();
+  const st = db.prepare(`SELECT o.item_id, o.level, o.ask, o.bid, o.price, o.volume FROM obs o
+    WHERE o.snapshot_id = (SELECT MAX(z.snapshot_id) FROM obs z WHERE z.item_id = o.item_id AND z.level = o.level AND z.snapshot_id <= ?)`);
+  st.bind([snapId]);
+  while (st.step()) {
+    const [i, l, ask, bid, price, volume] = st.get();
+    if (ask == null && bid == null && price == null && volume == null) continue; // end marker
+    m.set(i + "|" + l, { ask: bidOrNull(ask), bid: bidOrNull(bid), price, volume });
+  }
+  st.free();
+  stateCache.set(snapId, m);
+  return m;
+}
+
+const histCache = new Map();
+function history(itemId, level) { // one point per snapshot, values carried forward; null = not listed
+  const key = itemId + "|" + level;
+  if (histCache.has(key)) return histCache.get(key);
+  const r = rows("SELECT snapshot_id, ask, bid, price, volume FROM obs WHERE item_id = ? AND level = ? ORDER BY snapshot_id", [itemId, level]);
+  const pts = []; let k = 0, cur = null;
+  for (const s of D.snaps) {
+    while (k < r.length && r[k][0] <= s.id) {
+      const [, ask, bid, price, volume] = r[k++];
+      cur = (ask == null && bid == null && price == null && volume == null) ? null : { ask: bidOrNull(ask), bid: bidOrNull(bid), price, volume };
+    }
+    pts.push({ ts: s.ts, v: cur });
+  }
+  histCache.set(key, pts);
+  return pts;
+}
+
+function pickThen(windowId) {
+  const L = D.latest, idx = D.snaps.length - 1;
+  if (idx === 0) return { snap: null, note: "Only one snapshot so far – nothing to compare with yet." };
+  if (windowId === "prev") return { snap: D.snaps[idx - 1], note: "" };
+  const secs = { "6h": 6 * 3600, "24h": 24 * 3600, "7d": 7 * 86400 }[windowId];
+  const target = L.ts - secs;
+  let best = null;
+  for (const s of D.snaps) if (s.ts <= target) best = s;
+  if (best) return { snap: best, note: "" };
+  const first = D.snaps[0];
+  return { snap: idx > 0 ? first : null,
+    note: `Only ${ago(L.ts - first.ts)} of history so far, so “${windowId}” compares with the oldest snapshot (${when(first.ts)}).` };
+}
+
+// ------------------------------------------------------------------ state
+const UI = {
+  tab: "movers", windowId: store.get("mw.window", "24h"), level: 0, minvol: store.get("mw.minvol", 100),
+  search: "", dir: "all", sort: { key: "abs", dir: -1 }, limit: 250,
+  item: null, itemLevel: 0, range: store.get("mw.range", 168), trend: store.get("mw.trend", 24), asTable: false,
+  watch: new Set(store.get("mw.watch", [])),
+};
+const saveWatch = () => store.set("mw.watch", [...UI.watch]);
+
+// ------------------------------------------------------------------ movers
+function moversData() {
+  const nowS = stateAt(D.latest.id), t = pickThen(UI.windowId);
+  const thenS = t.snap ? stateAt(t.snap.id) : new Map();
+  const out = [];
+  for (const [key, n] of nowS) {
+    const [iid, lvl] = key.split("|").map(Number);
+    if (lvl !== UI.level) continue;
+    const it = D.items.get(iid);
+    if (UI.search && !it.name.toLowerCase().includes(UI.search.toLowerCase())) continue;
+    if ((n.volume || 0) < UI.minvol) continue;
+    const o = thenS.get(key) || null;
+    const dBid = o ? pct(n.bid, o.bid) : null, dAsk = o ? pct(n.ask, o.ask) : null;
+    const nowV = n.volume > 0, thenV = o && o.volume > 0;
+    const volNew = !!t.snap && nowV && !thenV, volGone = !!t.snap && !nowV && thenV;   // traded now but not then / the other way round
+    const dVol = nowV && thenV ? pct(n.volume, o.volume) : null;
+    const dVolS = volNew ? 1e9 : volGone ? -100 : dVol;                                 // sort key: "new" first, "no trades" last
+    const spread = n.ask != null && n.bid != null && n.bid > 0 ? ((n.ask - n.bid) / n.bid) * 100 : null;
+    const move = dBid != null ? dBid : dAsk;
+    if (UI.dir === "up" && !(move > 0.005)) continue;
+    if (UI.dir === "down" && !(move < -0.005)) continue;
+    out.push({ key, iid, lvl, name: it.name, n, bid: n.bid, ask: n.ask, vol: n.volume, dBid, dAsk, dVol, dVolS, volNew, volGone, spread, abs: move == null ? -1 : Math.abs(move), move });
+  }
+  return { list: out, t };
+}
+
+const COLS = [
+  { k: "name", label: "Item", num: false }, { k: "bid", label: "Bid" }, { k: "dBid", label: "Bid change" },
+  { k: "ask", label: "Ask" }, { k: "dAsk", label: "Ask change" }, { k: "spread", label: "Spread" },
+  { k: "vol", label: "Volume / hour" }, { k: "dVol", label: "Volume change" },
+];
+
+function renderMovers() {
+  const { list, t } = moversData();
+  $("windownote").replaceChildren(t.note ? el("p", { class: "note", text: t.note }) : "");
+  const s = UI.sort;
+  list.sort((a, b) => {
+    const x = a[s.key], y = b[s.key];
+    if (x == null && y == null) return 0;
+    if (x == null) return 1; if (y == null) return -1; // missing values always last
+    return (typeof x === "string" ? x.localeCompare(y) : x - y) * s.dir;
+  });
+  const up = list.filter((r) => r.move > 0.005).length, dn = list.filter((r) => r.move < -0.005).length;
+  $("summary").textContent = `${list.length} items · ${up} up · ${dn} down · ${list.length - up - dn} unchanged` +
+    (t.snap ? ` · latest ${when(D.latest.ts)} vs ${when(t.snap.ts)} (${ago(D.latest.ts - t.snap.ts)} earlier)` : "");
+
+  const thead = $("movers").tHead; thead.replaceChildren();
+  const tr = el("tr");
+  tr.append(el("th", { scope: "col", "aria-label": "Watch" }));
+  for (const c of COLS) {
+    const th = el("th", { scope: "col" });
+    const sk = { dBid: "abs", dVol: "dVolS" }[c.k] || c.k;
+    if (s.key === sk) th.setAttribute("aria-sort", s.dir > 0 ? "ascending" : "descending");
+    const b = el("button", { text: c.label + (th.hasAttribute("aria-sort") ? (s.dir > 0 ? " ↑" : " ↓") : "") });
+    b.addEventListener("click", () => {
+      const key = sk;
+      UI.sort = UI.sort.key === key ? { key, dir: -UI.sort.dir } : { key, dir: c.k === "name" ? 1 : -1 };
+      renderMovers();
+    });
+    th.append(b); tr.append(th);
+  }
+  thead.append(tr);
+
+  const tb = $("movers").tBodies[0]; tb.replaceChildren();
+  for (const r of list.slice(0, UI.limit)) {
+    const row = el("tr");
+    const star = el("button", { "aria-pressed": String(UI.watch.has(r.key)), "aria-label": "Watch " + r.name, text: UI.watch.has(r.key) ? "★" : "☆" });
+    star.addEventListener("click", () => { toggleWatch(r.key); star.setAttribute("aria-pressed", String(UI.watch.has(r.key))); star.textContent = UI.watch.has(r.key) ? "★" : "☆"; });
+    row.append(el("td", { class: "star" }, star));
+    const nm = el("button", { text: r.name }); nm.addEventListener("click", () => openItem(r.iid, r.lvl));
+    row.append(el("td", { class: "name" }, nm));
+    row.append(el("td", { text: full(r.bid) }), el("td", {}, deltaNode(r.dBid)),
+      el("td", { text: full(r.ask) }), el("td", {}, deltaNode(r.dAsk)),
+      el("td", { text: r.spread == null ? "—" : r.spread.toFixed(1) + "%" }),
+      el("td", { text: full(r.vol) }), el("td", {}, volDeltaNode(r)));
+    tb.append(row);
+  }
+  const more = $("more");
+  more.replaceChildren();
+  if (list.length > UI.limit) {
+    more.append(`Showing the first ${UI.limit} of ${list.length}. `);
+    more.append(el("button", { class: "btn", text: "Show all", onclick: () => { UI.limit = 1e9; renderMovers(); } }));
+  }
+  if (!list.length) tb.append(el("tr", {}, el("td", { colspan: "9", class: "empty", text: "No items match these filters." })));
+}
+
+// ------------------------------------------------------------------ time chart (SVG, no dependencies)
+function niceTicks(min, max, n = 4) {
+  if (min === max) { min -= 1; max += 1; }
+  const raw = (max - min) / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw);
+  const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step, ticks = [];
+  for (let v = lo; v <= hi + step / 2; v += step) ticks.push(v);
+  return { lo, hi, ticks };
+}
+const SVGNS = "http://www.w3.org/2000/svg";
+const sv = (tag, attrs = {}) => { const n = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; };
+
+
+// Volume is shown on the average-price line itself: thicker and more saturated = more units traded that hour.
+const hex2rgb = (h) => { const n = parseInt(h.replace("#", ""), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+const mixHex = (bg, fg, t) => { const a = hex2rgb(bg), b = hex2rgb(fg); return "#" + [0, 1, 2].map((i) => Math.round(a[i] + (b[i] - a[i]) * t).toString(16).padStart(2, "0")).join(""); };
+function volStyle(vmax, base, surface) {
+  const f = (v) => Math.sqrt(Math.max(0, Math.min(1, (v || 0) / (vmax || 1)))); // sqrt: area-like, so small hours stay visible
+  const [r, g, b] = hex2rgb(surface), dark = (0.299 * r + 0.587 * g + 0.114 * b) < 128;
+  const pale = mixHex(surface, base, 0.30), deep = mixHex(base, dark ? "#ffffffff".slice(0, 7) : "#000000", 0.38); // quiet = pale, busy = deep (brighter on a dark page)
+  const color = (v) => { const x = f(v); return x < 0.5 ? mixHex(pale, base, x / 0.5) : mixHex(base, deep, (x - 0.5) / 0.5); };
+  return { w: (v) => 1.5 + 3.5 * f(v), color }; // 1.5 to 5 px; colour carries most of the volume signal
+}
+
+/* One chart for the item page, made of stacked panels that share one time axis and one crosshair
+   (price on top, volume below, spread at the bottom - separate y scales, never a dual axis).
+   Every series is aligned to `ts` (null = no value).
+   o = { title, ts, panels:[{ h, label, fmtTick?, zero?, band?:{lo,hi,color}, lines?:[{vals,color}], bars?:{vals,color} }],
+         tip:[{name,color,vals,fmt?,none?}] } */
+function timeChart(host, o) {
+  host.replaceChildren();
+  const ts = o.ts, N = ts.length, panels = o.panels, GAP_SEC = 5400, pgap = 34;
+  const wrap = el("div", { class: "chart" }), tip = el("div", { class: "tip" });
+  host.append(wrap);
+  const W = Math.max(320, host.clientWidth || 640), m = { l: 56, r: 64, t: 10, b: 24 };
+  const pw = W - m.l - m.r, bodyH = panels.reduce((n, p) => n + p.h, 0) + pgap * (panels.length - 1), H = m.t + bodyH + m.b;
+  const t0 = ts[0] - 1800, t1 = ts[N - 1] + 1800, span = t1 - t0;
+  const X = (t) => m.l + ((t - t0) / span) * pw;
+  const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", tabindex: "0", "aria-label": o.title + ". Use left and right arrow keys to read values." });
+
+  const segments = (arrs) => { // runs of consecutive indexes where every given array has a value and no gap in time
+    const out = []; let cur = [];
+    for (let i = 0; i < N; i++) {
+      const has = arrs.every((a) => a[i] != null);
+      if (has && cur.length && ts[i] - ts[cur[cur.length - 1]] <= GAP_SEC) cur.push(i);
+      else { if (cur.length) out.push(cur); cur = has ? [i] : []; }
+    }
+    if (cur.length) out.push(cur);
+    return out;
+  };
+
+  const hoverDots = [];
+  const defs0 = sv("defs"), pat = sv("pattern", { id: "nosnap", width: 7, height: 7, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" });
+  pat.append(sv("line", { x1: 0, y1: 0, x2: 0, y2: 7, stroke: "var(--axis)", "stroke-width": 1.2 }));
+  defs0.append(pat); svg.append(defs0);
+  let top = m.t;
+  for (const p of panels) {
+    const fmtTick = p.fmtTick || fmt, vals = [];
+    if (p.band) vals.push(...p.band.lo.filter((v) => v != null), ...p.band.hi.filter((v) => v != null));
+    for (const l of p.lines || []) vals.push(...l.vals.filter((v) => v != null));
+    if (p.vline) vals.push(...p.vline.vals.filter((v) => v != null)); // the average-trade-price line must fit in the y range too
+    for (const d of p.dashed || []) vals.push(...d.vals.filter((v) => v != null));
+    if (p.bars) vals.push(...p.bars.vals.filter((v) => v != null));
+    const base = p.bars || p.zero;
+    const hi0 = vals.length ? Math.max(...vals) : 1, dataLo = vals.length ? Math.min(...vals) : 0;
+    const pad = base ? hi0 * 0.05 : (hi0 - dataLo) * 0.08 || hi0 * 0.05 || 1;
+    const { lo: y0, hi: y1, ticks } = niceTicks(base ? 0 : Math.max(0, dataLo - pad), hi0 + pad, Math.max(2, Math.round(p.h / 55)));
+    const ph = p.h, ptop = top, Y = (v) => ptop + ph - ((v - y0) / (y1 - y0)) * ph; // ptop is fixed per panel: the Y function is also used later by the hover dots and labels
+    for (let i = 1; i < N; i++) if (ts[i] - ts[i - 1] > GAP_SEC) // stretches without snapshots: hatched
+      svg.append(sv("rect", { x: X(ts[i - 1]), y: top, width: X(ts[i]) - X(ts[i - 1]), height: ph, fill: "url(#nosnap)" }));
+    for (const v of ticks) {
+      svg.append(sv("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)", "stroke-width": 1 }));
+      const t = sv("text", { x: m.l - 8, y: Y(v) + 4, "text-anchor": "end", fill: "var(--muted)", "font-size": 11 }); t.textContent = fmtTick(v); svg.append(t);
+    }
+    svg.append(sv("line", { x1: m.l, x2: W - m.r, y1: top + ph, y2: top + ph, stroke: "var(--axis)", "stroke-width": 1 }));
+    if (p.label) { const lab = sv("text", { x: m.l, y: top - 9, fill: "var(--ink-2)", "font-size": 11, "font-weight": 600 }); lab.textContent = p.label; svg.append(lab); }
+
+    if (p.bars) { // one bar per hour: <= 24px wide, thin surface gap, 4px rounded top, square on the baseline
+      const slot = (pw * 3600) / span, bw = Math.min(24, Math.max(1, slot - Math.min(2, slot * 0.3)));
+      p.bars.vals.forEach((v, i) => {
+        if (v == null || v <= 0) return;
+        const x = X(ts[i]) - bw / 2, y = Y(v), h = top + ph - y;
+        if (h < 0.5) return;
+        const r = bw >= 8 ? Math.min(4, h) : 0;
+        const d = r ? `M${x} ${y + h} L${x} ${y + r} Q${x} ${y} ${x + r} ${y} L${x + bw - r} ${y} Q${x + bw} ${y} ${x + bw} ${y + r} L${x + bw} ${y + h} Z`
+                    : `M${x} ${y + h} L${x} ${y} L${x + bw} ${y} L${x + bw} ${y + h} Z`;
+        svg.append(sv("path", { d, fill: p.bars.color }));
+      });
+    }
+    const edges = [], labels = [];
+    if (p.band) { // shaded range between lo (bid) and hi (ask); each edge has its own colour
+      const { lo, hi } = p.band, fill = p.band.fill || "var(--ink-2)",
+         cols = [[hi, p.band.hiColor], [lo, p.band.loColor]];
+      for (const seg of segments([lo, hi])) {
+        if (seg.length < 2) { for (const [arr, c] of cols) edges.push(sv("circle", { cx: X(ts[seg[0]]), cy: Y(arr[seg[0]]), r: 2.5, fill: c })); continue; }
+        const top_ = seg.map((i, k) => (k ? "L" : "M") + X(ts[i]).toFixed(1) + " " + Y(hi[i]).toFixed(1)).join(" ");
+        const bot_ = [...seg].reverse().map((i) => "L" + X(ts[i]).toFixed(1) + " " + Y(lo[i]).toFixed(1)).join(" ");
+        svg.append(sv("path", { d: top_ + " " + bot_ + " Z", fill, "fill-opacity": 0.12 }));
+        for (const [arr, c] of cols) // the bid and ask lines are drawn after the trade line, so they sit on top of it
+          edges.push(sv("path", { d: seg.map((i, k) => (k ? "L" : "M") + X(ts[i]).toFixed(1) + " " + Y(arr[i]).toFixed(1)).join(" "), fill: "none", stroke: c, "stroke-width": 1.5, "stroke-linejoin": "round" }));
+      }
+      for (const [arr, c] of cols) { hoverDots.push({ vals: arr, Y, color: c }); labels.push({ vals: arr, Y, color: c }); }
+    }
+    for (const l of p.lines || []) {
+      for (const seg of segments([l.vals])) {
+        if (seg.length >= 2)
+          svg.append(sv("path", { d: seg.map((i, k) => (k ? "L" : "M") + X(ts[i]).toFixed(1) + " " + Y(l.vals[i]).toFixed(1)).join(" "), fill: "none", stroke: l.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+        else // a lone point (one hour with trades between hours without) still has to be visible
+          svg.append(sv("circle", { cx: X(ts[seg[0]]), cy: Y(l.vals[seg[0]]), r: 4, fill: l.color, stroke: "var(--surface)", "stroke-width": 2 }));
+      }
+      const last = [...l.vals.keys()].reverse().find((i) => l.vals[i] != null);
+      if (last != null) svg.append(sv("circle", { cx: X(ts[last]), cy: Y(l.vals[last]), r: 4, fill: l.color, stroke: "var(--surface)", "stroke-width": 2 }));
+      labels.push({ vals: l.vals, Y, color: l.color });
+    }
+    for (const d of p.dashed || []) // trend lines: pale and dashed, under everything else
+      for (const seg of segments([d.vals])) if (seg.length >= 2)
+        svg.append(sv("path", { d: seg.map((i, k) => (k ? "L" : "M") + X(ts[i]).toFixed(1) + " " + Y(d.vals[i]).toFixed(1)).join(" "), fill: "none", stroke: d.color, "stroke-width": 1.5, "stroke-opacity": 0.5, "stroke-dasharray": "6 4", "stroke-linecap": "round" }));
+    if (p.vline) { // average trade price; thickness + shade = units traded that hour
+      const { vals: pv, vol, style } = p.vline;
+      const defs = sv("defs"); svg.append(defs);
+      const pts = (i) => ({ x: X(ts[i]), y: Y(pv[i]), w: style.w(vol[i]), c: style.color(vol[i]) });
+      let gid = 0;
+      for (const seg of segments([pv])) {
+        for (let k = 1; k < seg.length; k++) {
+          const a = pts(seg[k - 1]), b = pts(seg[k]), id = "vg" + (gid++) + "_" + Math.round(Math.random() * 1e6);
+          const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+          if (len < 0.01) continue;
+          const nx = -dy / len, ny = dx / len; // unit normal: the ribbon is as thick as asked at any slope, not just on flat stretches
+          const g = sv("linearGradient", { id, gradientUnits: "userSpaceOnUse", x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+          g.append(sv("stop", { offset: 0, "stop-color": a.c }), sv("stop", { offset: 1, "stop-color": b.c }));
+          defs.append(g);
+          const P = (q, sgn) => `${(q.x + sgn * nx * q.w / 2).toFixed(2)},${(q.y + sgn * ny * q.w / 2).toFixed(2)}`;
+          svg.append(sv("polygon", { points: `${P(a, 1)} ${P(b, 1)} ${P(b, -1)} ${P(a, -1)}`, fill: `url(#${id})` }));
+        }
+        for (const i of seg) { const q = pts(i); svg.append(sv("circle", { cx: q.x, cy: q.y, r: q.w / 2, fill: q.c })); } // round joins and lone hours
+      }
+      hoverDots.push({ vals: pv, Y, color: p.vline.base }); labels.push({ vals: pv, Y, color: p.vline.base });
+    }
+    for (const l of p.lines || []) hoverDots.push({ vals: l.vals, Y, color: l.color });
+    svg.append(...edges);
+    const ends = labels.map((l) => { const i = [...l.vals.keys()].reverse().find((k) => l.vals[k] != null); return i == null ? null : { y: l.Y(l.vals[i]), v: l.vals[i], color: l.color }; })
+      .filter(Boolean).sort((a, b) => a.y - b.y);
+    const LH = 14; // minimum distance between two labels
+    for (let k = 1; k < ends.length; k++) if (ends[k].y < ends[k - 1].y + LH) ends[k].y = ends[k - 1].y + LH;
+    const overflow = ends.length ? ends[ends.length - 1].y - (top + ph) : 0;
+    if (overflow > 0) for (const e of ends) e.y -= overflow, e.y = Math.max(e.y, top + 4);
+    for (let k = 1; k < ends.length; k++) if (ends[k].y < ends[k - 1].y + LH) ends[k].y = ends[k - 1].y + LH; // re-check after the shift up
+    for (const e of ends) {
+      const lb = sv("text", { x: W - m.r + 8, y: e.y + 4, fill: e.color, "font-size": 11, "font-weight": 700 });
+      lb.textContent = fmtTick(e.v); svg.append(lb);
+    }
+    top += ph + pgap;
+  }
+
+  // x axis labels once, under the last panel, on round local hours or midnights
+  const off = -new Date(t0 * 1000).getTimezoneOffset() * 60;
+  const STEPS = [3600, 7200, 10800, 21600, 43200, 86400, 172800, 604800];
+  const stepSec = STEPS.find((st) => span / st <= 6) || 604800;
+  const tickFmt = stepSec >= 86400 ? dtDay : span > 86400 ? dtf : dtShort;
+  for (let t = Math.ceil((t0 + off) / stepSec) * stepSec - off; t <= t1; t += stepSec) {
+    const tx = sv("text", { x: X(t), y: H - 6, "text-anchor": "middle", fill: "var(--muted)", "font-size": 11 });
+    tx.textContent = tickFmt.format(new Date(t * 1000)); svg.append(tx);
+  }
+
+  const cross = sv("line", { y1: m.t, y2: m.t + bodyH, stroke: "var(--ink-2)", "stroke-width": 1, visibility: "hidden" });
+  const dots = hoverDots.map((d) => sv("circle", { r: 4, fill: d.color, stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden" }));
+  svg.append(...dots);
+  const hit = sv("rect", { x: m.l, y: m.t, width: pw, height: bodyH, fill: "transparent" });
+  svg.append(cross, hit);
+  wrap.append(svg, tip);
+
+  let cur = -1;
+  const show = (i) => {
+    cur = i; const x = X(ts[i]);
+    cross.setAttribute("x1", x); cross.setAttribute("x2", x); cross.setAttribute("visibility", "visible");
+    hoverDots.forEach((d, k) => { const v = d.vals[i]; if (v == null) dots[k].setAttribute("visibility", "hidden"); else { dots[k].setAttribute("cx", x); dots[k].setAttribute("cy", d.Y(v)); dots[k].setAttribute("visibility", "visible"); } });
+    tip.replaceChildren(el("div", { class: "t", text: when(ts[i]) }));
+    for (const r of o.tip) {
+      const v = r.vals[i];
+      const key = el("span", { class: "key", style: "border-color:" + (r.color || "transparent") });
+      tip.append(el("div", { class: "r" }, key, el("b", { text: v == null ? (r.none || "none") : (r.fmt || full)(v) }), el("span", { class: "n", text: r.name })));
+    }
+    tip.style.display = "block";
+    const tw = tip.offsetWidth, left = x + 14 + tw > W ? x - 14 - tw : x + 14;
+    tip.style.left = Math.max(0, left) + "px"; tip.style.top = (m.t + 6) + "px";
+  };
+  const hide = () => { cur = -1; cross.setAttribute("visibility", "hidden"); dots.forEach((d) => d.setAttribute("visibility", "hidden")); tip.style.display = "none"; };
+  hit.addEventListener("pointermove", (e) => {
+    const r = svg.getBoundingClientRect(), px = ((e.clientX - r.left) / r.width) * W;
+    let best = 0, bd = 1e9; ts.forEach((t, i) => { const d = Math.abs(X(t) - px); if (d < bd) { bd = d; best = i; } });
+    show(best);
+  });
+  hit.addEventListener("pointerleave", hide);
+  svg.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft") { show(Math.max(0, (cur < 0 ? N : cur) - 1)); e.preventDefault(); }
+    else if (e.key === "ArrowRight") { show(Math.min(N - 1, cur + 1)); e.preventDefault(); }
+    else if (e.key === "Escape") hide();
+  });
+  svg.addEventListener("blur", hide);
+}
+
+// ------------------------------------------------------------------ item view
+function renderItem() {
+  const body = $("item-body");
+  if (!UI.item) { body.replaceChildren(el("div", { class: "empty", text: "Pick an item above, or click one in Movers." })); return; }
+  const it = D.items.get(UI.item), lvl = UI.itemLevel, key = it.id + "|" + lvl;
+  $("i-search").value = it.name;
+  const lvls = rows("SELECT DISTINCT level FROM obs WHERE item_id = ? ORDER BY level", [it.id]).map((r) => r[0]);
+  const sel = $("i-level"); sel.replaceChildren(...lvls.map((l) => el("option", { value: l, text: "+" + l, ...(l === lvl ? { selected: "" } : {}) })));
+  const star = $("i-star"); star.setAttribute("aria-pressed", String(UI.watch.has(key))); star.textContent = UI.watch.has(key) ? "★ Watching" : "☆ Watch";
+  $("i-table").setAttribute("aria-pressed", String(UI.asTable)); $("i-table").textContent = UI.asTable ? "Show charts" : "Show table";
+  for (const b of $("i-range").children) b.setAttribute("aria-pressed", String(+b.dataset.r === UI.range));
+  for (const b of $("i-trend").children) b.setAttribute("aria-pressed", String(+b.dataset.w === UI.trend));
+
+  const all = history(it.id, lvl);
+  const cutoff = UI.range ? D.latest.ts - UI.range * 3600 : 0;
+  const pts = all.filter((p) => p.ts >= cutoff);
+  const nowV = all[all.length - 1].v, t = pickThen(UI.windowId), thenIdx = t.snap ? all.find((p) => p.ts === t.snap.ts) : null, thenV = thenIdx ? thenIdx.v : null;
+  const spreadOf = (v) => (v && v.ask != null && v.bid != null && v.bid > 0 ? ((v.ask - v.bid) / v.bid) * 100 : null);
+
+  const tile = (label, v, d) => el("div", { class: "tile" }, el("div", { class: "l", text: label }), el("div", { class: "v", text: v }), el("div", { class: "d" }, d));
+  const tiles = el("div", { class: "tiles" },
+    tile("Bid (instant sell)", nowV ? full(nowV.bid) : "—", nowV && thenV ? deltaNode(pct(nowV.bid, thenV.bid)) : ""),
+    tile("Ask (instant buy)", nowV ? full(nowV.ask) : "—", nowV && thenV ? deltaNode(pct(nowV.ask, thenV.ask)) : ""),
+    tile("Average trade price, last hour", nowV && nowV.price != null ? full(nowV.price) : "no trades", nowV && thenV && nowV.price != null && thenV.price != null ? deltaNode(pct(nowV.price, thenV.price)) : ""),
+    tile("Units traded, last hour", nowV && nowV.volume != null ? full(nowV.volume) : "none", nowV && thenV && nowV.volume != null && thenV.volume != null ? deltaNode(pct(nowV.volume, thenV.volume)) : ""),
+    tile("Spread", spreadOf(nowV) == null ? "—" : spreadOf(nowV).toFixed(1) + "%", ""));
+  const head = el("p", { class: "summary", text: t.snap ? `Changes compare ${when(D.latest.ts)} with ${when(t.snap.ts)}.` : "" });
+
+  const ts = pts.map((p) => p.ts), g = (f) => pts.map((p) => (p.v ? p.v[f] : null));
+  const bid = g("bid"), ask = g("ask"), avg = g("price"), vol = g("volume"), spread = pts.map((p) => spreadOf(p.v));
+  const value = pts.map((p) => (p.v && p.v.price != null && p.v.volume != null ? p.v.price * p.v.volume : null));
+
+  if (UI.asTable) {
+    const tbl = el("table"); tbl.append(el("thead", {}, el("tr", {}, ...["Time", "Bid", "Ask", "Spread", "Average trade price", "Units traded", "Value traded"].map((h) => el("th", { scope: "col", text: h })))));
+    const tb = el("tbody");
+    for (let i = pts.length - 1, n = 0; i >= 0 && n < 500; i--, n++)
+      tb.append(el("tr", {}, el("td", { text: when(ts[i]) }), el("td", { text: pts[i].v ? full(bid[i]) : "not listed" }), el("td", { text: full(ask[i]) }),
+        el("td", { text: spread[i] == null ? "—" : spread[i].toFixed(1) + "%" }), el("td", { text: full(avg[i]) }), el("td", { text: full(vol[i]) }), el("td", { text: value[i] == null ? "—" : fmt(value[i]) })));
+    tbl.append(tb);
+    body.replaceChildren(tiles, head, el("div", { class: "card" }, el("div", { class: "tablewrap" }, tbl)));
+    return;
+  }
+
+  const cssv = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const cBid = cssv("--sell"), c2 = cssv("--s1"), cAsk = cssv("--buy"), surface = cssv("--surface"); // bid = what you get when selling (red), ask = what you pay when buying (green)
+  const traded = vol.filter((v) => v != null && v > 0), vmin = traded.length ? Math.min(...traded) : 0, vmax = traded.length ? Math.max(...traded) : 0;
+  const style = volStyle(vmax, c2, surface);
+  const host = el("div");
+
+  // legend: the three lines, the band between bid and ask, and a small ramp showing what thin/pale and thick/strong mean
+  const ramp = sv("svg", { width: 120, height: 16, viewBox: "0 0 120 16", "aria-hidden": "true" });
+  [0, 0.25, 0.5, 0.75, 1].forEach((f, k) => {
+    const v = vmax * f * f;
+    ramp.append(sv("line", { x1: 2 + k * 24, x2: 22 + k * 24, y1: 8, y2: 8, stroke: style.color(v), "stroke-width": style.w(v), "stroke-linecap": "round" }));
+  });
+  const legend = el("div", { class: "legend" },
+    el("span", {}, el("span", { class: "key", style: "border-color:" + cAsk }), "Ask"),
+    el("span", {}, el("span", { class: "key", style: "border-color:" + cBid }), "Bid"),
+    el("span", { style: "display:inline-flex;align-items:center;gap:8px" }, "Average trade price: thicker and stronger = more units traded that hour", ramp,
+      el("span", { text: traded.length ? fmt(vmin) + " – " + fmt(vmax) : "no trades" })),
+    el("span", {}, el("span", { class: "dash" }), "Ask and bid trend (" + (UI.trend >= 24 && UI.trend % 24 === 0 ? UI.trend / 24 + " d" : UI.trend + " h") + " average)"),
+    el("span", {}, el("span", { class: "hatch" }), "No snapshots"));
+  body.replaceChildren(tiles, head, el("div", { class: "card" }, el("div", { class: "charthead" }, el("h3", { text: it.name })), el("div", { style: "margin:0 0 8px" }, legend), host));
+  if (pts.length < 2) {
+    host.replaceWith(el("div", { class: "empty", text: "Only one snapshot in this range – charts need at least two. The history grows every hour." }));
+    return;
+  }
+  const trendLabel = UI.trend >= 24 && UI.trend % 24 === 0 ? UI.trend / 24 + " d" : UI.trend + " h";
+  const askT = trailingAvg(all, "ask", UI.trend), bidT = trailingAvg(all, "bid", UI.trend);
+  const askTrend = ts.map((t) => askT.get(t)), bidTrend = ts.map((t) => bidT.get(t));
+  const pctFmt = (v) => v.toFixed(v < 10 ? 2 : 1) + "%";
+  timeChart(host, {
+    title: it.name + ": bid-ask range and average trade price, with units traded shown by the thickness of the line", ts,
+    panels: [{ h: 380, band: { lo: bid, hi: ask, loColor: cBid, hiColor: cAsk }, dashed: [{ vals: askTrend, color: cAsk }, { vals: bidTrend, color: cBid }], vline: { vals: avg, vol, style, base: c2 } }],
+    tip: [
+      { name: "Ask", color: cAsk, vals: ask, none: "no order" },
+      { name: "Average trade price", color: c2, vals: avg, none: "no trades" },
+      { name: "Bid", color: cBid, vals: bid, none: "no order" },
+      { name: "Units traded", color: null, vals: vol, none: "no trades" },
+      { name: "Value traded", color: null, vals: value, fmt: fmt, none: "—" },
+      { name: "Spread", color: null, vals: spread, fmt: pctFmt, none: "—" },
+      { name: "Ask trend (" + trendLabel + " average)", color: cAsk, vals: askTrend, none: "not enough data" },
+      { name: "Bid trend (" + trendLabel + " average)", color: cBid, vals: bidTrend, none: "not enough data" },
+    ],
+  });
+}
+
+// Trailing average of one field over the last `hours` hours (by time, not by count); needs at least `minN` samples.
+function trailingAvg(all, field, hours, minN = 3) {
+  const out = new Map(); let lo = 0, sum = 0, n = 0; const q = [];
+  for (let i = 0; i < all.length; i++) {
+    const v = all[i].v ? all[i].v[field] : null;
+    if (v != null) { q.push([all[i].ts, v]); sum += v; n++; }
+    while (q.length && q[0][0] < all[i].ts - hours * 3600) { sum -= q[0][1]; n--; q.shift(); }
+    out.set(all[i].ts, n >= minN ? sum / n : null);
+  }
+  return out;
+}
+
+function openItem(iid, lvl) { UI.item = iid; UI.itemLevel = lvl ?? 0; setTab("item"); }
+
+// ------------------------------------------------------------------ watchlist
+function toggleWatch(key) { UI.watch.has(key) ? UI.watch.delete(key) : UI.watch.add(key); saveWatch(); }
+
+function spark(pts, color, w = 200, h = 44) {
+  const v = pts.filter((p) => p != null);
+  const svg = sv("svg", { viewBox: `0 0 ${w} ${h}`, width: "100%", role: "img", "aria-label": "price trend" });
+  if (v.length < 2) return svg;
+  const lo = Math.min(...v), hi = Math.max(...v), n = pts.length;
+  const X = (i) => 4 + (i / (n - 1)) * (w - 8), Y = (x) => h - 6 - ((x - lo) / (hi - lo || 1)) * (h - 12);
+  let d = "", pen = false;
+  pts.forEach((x, i) => { if (x == null) { pen = false; return; } d += (pen ? "L" : "M") + X(i).toFixed(1) + " " + Y(x).toFixed(1) + " "; pen = true; });
+  svg.append(sv("path", { d, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  const li = pts.length - 1 - [...pts].reverse().findIndex((x) => x != null);
+  svg.append(sv("circle", { cx: X(li), cy: Y(pts[li]), r: 4, fill: color, stroke: "var(--surface)", "stroke-width": 2 }));
+  return svg;
+}
+
+function renderWatch() {
+  const body = $("watch-body"); body.replaceChildren();
+  const keys = [...UI.watch];
+  if (!keys.length) { body.append(el("div", { class: "empty", text: "Nothing on your watchlist yet. Click ☆ next to an item in Movers, or press “Watch” on an item page." })); return; }
+  const t = pickThen(UI.windowId);
+  if (t.note) body.append(el("p", { class: "note", text: t.note }));
+  const cssv = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const grid = el("div", { class: "cards" });
+  const cutoff = D.latest.ts - 7 * 86400;
+  for (const key of keys) {
+    const [iid, lvl] = key.split("|").map(Number), it = D.items.get(iid);
+    if (!it) continue;
+    const all = history(iid, lvl), now = all[all.length - 1].v, then = t.snap ? all.find((p) => p.ts === t.snap.ts)?.v : null;
+    const spk = all.filter((p) => p.ts >= cutoff).map((p) => (p.v ? p.v.bid : null));
+    const nm = el("button", { class: "nm", text: it.name + (lvl ? " +" + lvl : "") }); nm.addEventListener("click", () => openItem(iid, lvl));
+    const rm = el("button", { class: "btn", text: "Remove", "aria-label": "Remove " + it.name }); rm.addEventListener("click", () => { toggleWatch(key); renderWatch(); });
+    const delta = now && then ? deltaNode(pct(now.bid, then.bid)) : "";
+    grid.append(el("div", { class: "wcard" },
+      el("div", { class: "top" }, nm, delta),
+      el("div", { class: "big", text: now ? full(now.bid) : "not listed" }),
+      el("div", { class: "sub", text: now ? `ask ${full(now.ask)} · volume ${full(now.volume)}` : "" }),
+      spark(spk, cssv("--s1")),
+      el("div", { class: "sub", style: "display:flex;justify-content:space-between;align-items:center" }, el("span", { text: "bid, last 7 days" }), rm)));
+  }
+  body.append(grid);
+}
+
+// ------------------------------------------------------------------ tabs, filters, loading
+function setTab(tab) {
+  UI.tab = tab;
+  for (const t of ["movers", "item", "watch"]) {
+    $("tab-" + t).setAttribute("aria-selected", String(t === tab));
+    $("p-" + t).classList.toggle("hidden", t !== tab);
+  }
+  $("f-minvol-l").classList.toggle("hidden", tab !== "movers"); $("f-search-l").classList.toggle("hidden", tab !== "movers");
+  $("f-dir-l").classList.toggle("hidden", tab !== "movers"); $("f-level").parentElement.classList.toggle("hidden", tab !== "movers");
+  $("windownote").replaceChildren();
+  render();
+}
+function render() {
+  if (!db) return;
+  if (UI.tab === "movers") renderMovers(); else if (UI.tab === "item") { renderItem(); $("windownote").replaceChildren(); } else renderWatch();
+}
+
+function afterLoad() {
+  $("load").classList.add("hidden"); $("app").classList.remove("hidden");
+  const age = Math.round(Date.now() / 1000 - D.latest.ts);
+  $("meta").textContent = `${D.snaps.length} snapshot${D.snaps.length === 1 ? "" : "s"} · ${D.items.size} items · latest ${when(D.latest.ts)} (${ago(age)} ago) · first ${when(D.snaps[0].ts)}`;
+  const lv = $("f-level"); lv.replaceChildren(...D.levels.map((l) => el("option", { value: l, text: "+" + l })));
+  lv.value = String(UI.level);
+  $("itemlist").replaceChildren(...[...D.byName.keys()].sort().map((n) => el("option", { value: n })));
+  $("f-window").value = UI.windowId; $("f-minvol").value = UI.minvol;
+  UI.item = null;
+  setTab("movers");
+}
+
+async function loadBytes(buf, name) {
+  try {
+    let bytes = buf;
+    const head = new Uint8Array(buf.slice(0, 2));
+    if (head[0] === 0x1f && head[1] === 0x8b) { // gzip
+      bytes = await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+    }
+    await openDb(bytes); afterLoad(); $("loaderr").textContent = "";
+  } catch (e) {
+    $("load").classList.remove("hidden"); $("app").classList.add("hidden");
+    $("loaderr").textContent = "Could not read " + (name || "the file") + ": " + e.message;
+  }
+}
+
+$("open").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", async (e) => { const f = e.target.files[0]; if (f) loadBytes(await f.arrayBuffer(), f.name); });
+const dz = $("load");
+dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("over"); });
+dz.addEventListener("dragleave", () => dz.classList.remove("over"));
+dz.addEventListener("drop", async (e) => { e.preventDefault(); dz.classList.remove("over"); const f = e.dataTransfer.files[0]; if (f) loadBytes(await f.arrayBuffer(), f.name); });
+document.addEventListener("dragover", (e) => e.preventDefault());
+document.addEventListener("drop", async (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) loadBytes(await f.arrayBuffer(), f.name); });
+
+for (const t of ["movers", "item", "watch"]) $("tab-" + t).addEventListener("click", () => setTab(t));
+$("f-window").addEventListener("change", (e) => { UI.windowId = e.target.value; store.set("mw.window", UI.windowId); render(); });
+$("f-level").addEventListener("change", (e) => { UI.level = +e.target.value; UI.limit = 250; render(); });
+$("f-minvol").addEventListener("input", (e) => { UI.minvol = Math.max(0, +e.target.value || 0); store.set("mw.minvol", UI.minvol); UI.limit = 250; render(); });
+$("f-search").addEventListener("input", (e) => { UI.search = e.target.value.trim(); UI.limit = 250; render(); });
+for (const b of $("f-dir-l").querySelectorAll("button")) b.addEventListener("click", () => {
+  UI.dir = b.dataset.dir; UI.limit = 250;
+  for (const x of $("f-dir-l").querySelectorAll("button")) x.setAttribute("aria-pressed", String(x === b));
+  render();
+});
+$("i-search").addEventListener("change", (e) => { const it = D.byName.get(e.target.value); if (it) { UI.item = it.id; UI.itemLevel = 0; renderItem(); } });
+$("i-level").addEventListener("change", (e) => { UI.itemLevel = +e.target.value; renderItem(); });
+for (const b of $("i-range").children) b.addEventListener("click", () => { UI.range = +b.dataset.r; store.set("mw.range", UI.range); renderItem(); });
+for (const b of $("i-trend").children) b.addEventListener("click", () => { UI.trend = +b.dataset.w; store.set("mw.trend", UI.trend); renderItem(); });
+$("i-star").addEventListener("click", () => { if (UI.item == null) return; toggleWatch(UI.item + "|" + UI.itemLevel); renderItem(); });
+$("i-table").addEventListener("click", () => { UI.asTable = !UI.asTable; renderItem(); });
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (UI.tab === "item") renderItem(); }, 150); });
+
+// theme toggle: auto -> light -> dark
+const themes = ["auto", "light", "dark"];
+function applyTheme(t) {
+  if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", t);
+  $("theme").textContent = "Theme: " + t; store.set("mw.theme", t); render();
+}
+$("theme").addEventListener("click", () => applyTheme(themes[(themes.indexOf(store.get("mw.theme", "auto")) + 1) % 3]));
+applyTheme(store.get("mw.theme", "auto"));
+
+// auto-load when served over http next to the database
+(async () => {
+  if (!location.protocol.startsWith("http")) return;
+  for (const name of ["market.db.gz", "market.db"]) {
+    try { const r = await fetch(name, { cache: "no-store" }); if (r.ok) { await loadBytes(await r.arrayBuffer(), name); return; } } catch (e) { /* try next */ }
+  }
+})();
+</script>
+</body>
+</html>
