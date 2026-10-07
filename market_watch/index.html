@@ -13,6 +13,7 @@
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
   --up: #006300; --down: #d03b3b; --accent: #2a78d6;
   --buy: #008300; --sell: #e34948;
+  --cost1: #8250df; --cost2: #b07d00;
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
@@ -23,9 +24,11 @@
     --s1: #3987e5; --s2: #d95926; --s3: #199e70;
     --up: #0ca30c; --down: #d03b3b; --accent: #3987e5;
     --buy: #008300; --sell: #e66767;
+    --cost1: #a98bf5; --cost2: #e3b341;
   }
 }
 :root[data-theme="dark"] {
+  --cost1: #a98bf5; --cost2: #e3b341;
   color-scheme: dark;
   --page: #0d0d0d; --surface: #1a1a19;
   --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
@@ -41,7 +44,7 @@ body { padding: 0 16px 48px; }
 .wrap { max-width: 1180px; margin: 0 auto; }
 header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; padding: 22px 0 8px; }
 h1 { font-size: 20px; margin: 0; font-weight: 650; }
-.meta { color: var(--ink-2); font-size: 13px; flex: 1 1 260px; }
+.meta { color: var(--ink-2); font-size: 13px; flex: 1 1 200px; min-width: 0; }
 button, select, input { font: inherit; color: var(--ink); }
 .btn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 .btn:hover { background: var(--wash); }
@@ -74,18 +77,18 @@ td.star button { background: none; border: 0; cursor: pointer; font-size: 16px; 
 td.star button[aria-pressed="true"] { color: var(--ink); }
 .up { color: var(--up); } .down { color: var(--down); } .flat { color: var(--muted); }
 .tablewrap { overflow-x: auto; max-height: 70vh; overflow-y: auto; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 10px 0 14px; }
-.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; }
-.tile .l { font-size: 12px; color: var(--ink-2); }
-.tile .v { font-size: 22px; font-weight: 650; }
-.tile .d { font-size: 12px; }
 .charthead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 6px; }
 .charthead h3 { margin: 0; font-size: 14px; font-weight: 600; }
-.legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); }
 .hatch { display: inline-block; width: 14px; height: 10px; vertical-align: middle; margin-right: 6px; border-radius: 2px; border: 1px solid var(--axis);
   background: repeating-linear-gradient(45deg, var(--axis) 0 1px, transparent 1px 4px); }
-.dash { display: inline-block; width: 18px; height: 0; border-top: 2px dashed var(--muted); vertical-align: middle; margin-right: 6px; opacity: .8; }
 .key { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+.key.dashed { border-top: 0; height: 2px; background: repeating-linear-gradient(90deg, var(--k) 0 4px, transparent 4px 7px); }
+.brush { margin: 0 0 14px; }
+.brush svg { display: block; width: 100%; height: auto; touch-action: none; user-select: none; }
+.brush .h { cursor: ew-resize; } .brush .h:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.brush .sel { cursor: grab; } .brush .sel:active { cursor: grabbing; }
+.brushmeta { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
 .chart { position: relative; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border);
@@ -106,6 +109,20 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
 .drop.over { border-color: var(--accent); background: var(--wash); }
 .hidden { display: none !important; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (min-width: 641px) {
+  header { flex-wrap: nowrap; align-items: center; }
+  header .btn { white-space: nowrap; flex: none; }
+}
+@media (min-width: 641px) { /* eight controls in one row: compact boxes; below this width the row wraps */
+  #i-filters { flex-wrap: nowrap; gap: 6px; }
+  #i-filters label { flex: 0 0 auto; min-width: 0; width: 64px; }
+  #i-filters label.grow { flex: 1 1 110px; width: auto; }
+  #i-filters #i-level-l { width: 58px; }
+  #i-filters #i-speed-l { width: 70px; }
+  #i-filters #i-hour-l { width: 100px; }
+  #i-filters select, #i-filters input { min-width: 0; width: 100%; padding: 6px; font-size: 13px; }
+  #i-filters .btn { white-space: nowrap; flex: none; padding: 6px 8px; }
+}
 @media (max-width: 640px) { body { padding: 0 10px 40px; } .filters label { flex: 1 1 140px; } }
 </style>
 </head>
@@ -160,26 +177,18 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
   </section>
 
   <section id="p-item" class="hidden">
-    <div class="filters">
-      <label>Item <input id="i-search" list="itemlist" placeholder="type an item name" autocomplete="off" style="min-width:260px"></label>
+    <div class="filters" id="i-filters">
+      <label class="grow">Item <input id="i-search" list="itemlist" placeholder="type an item name" autocomplete="off"></label>
       <datalist id="itemlist"></datalist>
-      <label>Level <select id="i-level"></select></label>
-      <div><div style="font-size:12px;color:var(--ink-2);margin-bottom:3px">Range</div>
-        <div class="seg" role="group" aria-label="Range" id="i-range">
-          <button data-r="24" aria-pressed="false">24 h</button>
-          <button data-r="168" aria-pressed="true">7 d</button>
-          <button data-r="720" aria-pressed="false">30 d</button>
-          <button data-r="0" aria-pressed="false">All</button>
-        </div></div>
-      <div><div style="font-size:12px;color:var(--ink-2);margin-bottom:3px">Trend window</div>
-        <div class="seg" role="group" aria-label="Trend window" id="i-trend">
-          <button data-w="6" aria-pressed="false">6 h</button>
-          <button data-w="24" aria-pressed="true">24 h</button>
-          <button data-w="168" aria-pressed="false">7 d</button>
-        </div></div>
+      <label id="i-level-l">Level <select id="i-level"></select></label>
+      <label id="i-artisan-l" class="hidden" title="Artisan buff: every crafting ingredient except the upgrade item needs count / (1 + this %) per craft, rounded up. Applies to all crafts. Not saved.">Artisan % <input id="i-artisan" type="number" min="0" step="0.01" value="11.22"></label>
+      <label id="i-gourmet-l" class="hidden" title="Gourmet buff, cooking and brewing only: chance that a craft makes one extra item for free. Lowers the ingredients and crafting time per unit. Not saved.">Gourmet % <input id="i-gourmet" type="number" min="0" step="0.01" value="13.46"></label>
+      <label id="i-speed-l" class="hidden" title="Action speed: the base time of a craft is divided by this %. Applies to all crafts. Not saved.">Speed % <input id="i-speed" type="number" min="1" step="0.01" value="133.75"></label>
+      <label id="i-eff-l" class="hidden" title="Efficiency: each action does 1 + this % crafts on average (126% = always 2, 26% chance of a 3rd). The extra crafts are not free, so it only saves time. Applies to all crafts. Not saved.">Effic. % <input id="i-eff" type="number" min="0" step="0.01" value="126"></label>
+      <label id="i-hour-l" class="hidden" title="Crafting time (real hours, with your speed and efficiency) is added to the cost lines at this price, in millions of coins per hour. Not saved.">Hour value (M) <input id="i-hour" type="number" min="0" step="0.05" value="0"></label>
       <button class="btn" id="i-star" aria-pressed="false">☆ Watch</button>
-      <button class="btn" id="i-table" aria-pressed="false">Show table</button>
     </div>
+    <div id="i-brush" class="brush"></div>
     <div id="item-body"><div class="empty">Pick an item above, or click one in Movers.</div></div>
   </section>
 
@@ -271,7 +280,7 @@ async function openDb(bytes) {
   D.byName = new Map([...D.items.values()].map((i) => [i.name, i]));
   D.levels = rows("SELECT DISTINCT level FROM obs ORDER BY level").map((r) => r[0]);
   D.latest = D.snaps[D.snaps.length - 1];
-  stateCache.clear(); histCache.clear();
+  stateCache.clear(); histCache.clear(); costCache.clear(); hasDepth = null; craftSet = null; craftSecs = null; recipes = null;
 }
 
 const stateCache = new Map();
@@ -292,6 +301,7 @@ function stateAt(snapId) { // Map "item|level" -> {ask,bid,price,volume}; unlist
 }
 
 const histCache = new Map();
+let hasDepth = null, craftSet = null, craftSecs = null, recipes = null; const costCache = new Map(); // item_recipe (one level) and the cost series computed from it; the cache key includes the artisan value
 function history(itemId, level) { // one point per snapshot, values carried forward; null = not listed
   const key = itemId + "|" + level;
   if (histCache.has(key)) return histCache.get(key);
@@ -326,7 +336,8 @@ function pickThen(windowId) {
 const UI = {
   tab: "movers", windowId: store.get("mw.window", "24h"), level: 0, minvol: store.get("mw.minvol", 100),
   search: "", dir: "all", sort: { key: "abs", dir: -1 }, limit: 250,
-  item: null, itemLevel: 0, range: store.get("mw.range", 168), trend: store.get("mw.trend", 24), asTable: false,
+  item: null, itemLevel: 0, hour: 0, // hour: coins per real crafting hour (the box is in millions)
+  artisan: 11.22, gourmet: 13.46, speed: 133.75, eff: 126, rangeLo: null, rangeHi: null, // range strip; null = default (last 7 days)
   watch: new Set(store.get("mw.watch", [])),
 };
 const saveWatch = () => store.set("mw.watch", [...UI.watch]);
@@ -444,8 +455,8 @@ function volStyle(vmax, base, surface) {
 /* One chart for the item page, made of stacked panels that share one time axis and one crosshair
    (price on top, volume below, spread at the bottom - separate y scales, never a dual axis).
    Every series is aligned to `ts` (null = no value).
-   o = { title, ts, panels:[{ h, label, fmtTick?, zero?, band?:{lo,hi,color}, lines?:[{vals,color}], bars?:{vals,color} }],
-         tip:[{name,color,vals,fmt?,none?}] } */
+   o = { title, ts, panels:[{ h, label, fmtTick?, zero?, band?:{lo,hi,color}, lines?:[{vals,color,w?,opacity?,dash?}], bars?:{vals,color} }],
+         tip:[{name,color,vals,fmt?,none?,dash?,text?(i)}]  (text composes the whole value, e.g. "12 (3.4M)") } */
 function timeChart(host, o) {
   host.replaceChildren();
   const ts = o.ts, N = ts.length, panels = o.panels, GAP_SEC = 5400, pgap = 34;
@@ -478,7 +489,6 @@ function timeChart(host, o) {
     if (p.band) vals.push(...p.band.lo.filter((v) => v != null), ...p.band.hi.filter((v) => v != null));
     for (const l of p.lines || []) vals.push(...l.vals.filter((v) => v != null));
     if (p.vline) vals.push(...p.vline.vals.filter((v) => v != null)); // the average-trade-price line must fit in the y range too
-    for (const d of p.dashed || []) vals.push(...d.vals.filter((v) => v != null));
     if (p.bars) vals.push(...p.bars.vals.filter((v) => v != null));
     const base = p.bars || p.zero;
     const hi0 = vals.length ? Math.max(...vals) : 1, dataLo = vals.length ? Math.min(...vals) : 0;
@@ -523,7 +533,7 @@ function timeChart(host, o) {
     for (const l of p.lines || []) {
       for (const seg of segments([l.vals])) {
         if (seg.length >= 2)
-          svg.append(sv("path", { d: seg.map((i, k) => (k ? "L" : "M") + X(ts[i]).toFixed(1) + " " + Y(l.vals[i]).toFixed(1)).join(" "), fill: "none", stroke: l.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+          svg.append(sv("path", { d: seg.map((i, k) => (k ? "L" : "M") + X(ts[i]).toFixed(1) + " " + Y(l.vals[i]).toFixed(1)).join(" "), fill: "none", stroke: l.color, "stroke-width": l.w || 2, "stroke-opacity": l.opacity ?? 1, "stroke-linejoin": "round", "stroke-linecap": "round", ...(l.dash ? { "stroke-dasharray": l.dash } : {}) }));
         else // a lone point (one hour with trades between hours without) still has to be visible
           svg.append(sv("circle", { cx: X(ts[seg[0]]), cy: Y(l.vals[seg[0]]), r: 4, fill: l.color, stroke: "var(--surface)", "stroke-width": 2 }));
       }
@@ -531,9 +541,6 @@ function timeChart(host, o) {
       if (last != null) svg.append(sv("circle", { cx: X(ts[last]), cy: Y(l.vals[last]), r: 4, fill: l.color, stroke: "var(--surface)", "stroke-width": 2 }));
       labels.push({ vals: l.vals, Y, color: l.color });
     }
-    for (const d of p.dashed || []) // trend lines: pale and dashed, under everything else
-      for (const seg of segments([d.vals])) if (seg.length >= 2)
-        svg.append(sv("path", { d: seg.map((i, k) => (k ? "L" : "M") + X(ts[i]).toFixed(1) + " " + Y(d.vals[i]).toFixed(1)).join(" "), fill: "none", stroke: d.color, "stroke-width": 1.5, "stroke-opacity": 0.5, "stroke-dasharray": "6 4", "stroke-linecap": "round" }));
     if (p.vline) { // average trade price; thickness + shade = units traded that hour
       const { vals: pv, vol, style } = p.vline;
       const defs = sv("defs"); svg.append(defs);
@@ -596,8 +603,8 @@ function timeChart(host, o) {
     tip.replaceChildren(el("div", { class: "t", text: when(ts[i]) }));
     for (const r of o.tip) {
       const v = r.vals[i];
-      const key = el("span", { class: "key", style: "border-color:" + (r.color || "transparent") });
-      tip.append(el("div", { class: "r" }, key, el("b", { text: v == null ? (r.none || "none") : (r.fmt || full)(v) }), el("span", { class: "n", text: r.name })));
+      const key = el("span", { class: "key" + (r.dash ? " dashed" : ""), style: "border-color:" + (r.color || "transparent") + ";--k:" + (r.color || "transparent") }); // dash: same look as the line on the chart
+      tip.append(el("div", { class: "r" }, key, el("b", { text: r.text ? r.text(i) : v == null ? (r.none || "none") : (r.fmt || full)(v) }), el("span", { class: "n", text: r.name })));
     }
     tip.style.display = "block";
     const tw = tip.offsetWidth, left = x + 14 + tw > W ? x - 14 - tw : x + 14;
@@ -621,51 +628,32 @@ function timeChart(host, o) {
 // ------------------------------------------------------------------ item view
 function renderItem() {
   const body = $("item-body");
-  if (!UI.item) { body.replaceChildren(el("div", { class: "empty", text: "Pick an item above, or click one in Movers." })); return; }
+  if (!UI.item) { $("i-brush").replaceChildren(); BR.key = ""; body.replaceChildren(el("div", { class: "empty", text: "Pick an item above, or click one in Movers." })); return; }
   const it = D.items.get(UI.item), lvl = UI.itemLevel, key = it.id + "|" + lvl;
   $("i-search").value = it.name;
   const lvls = rows("SELECT DISTINCT level FROM obs WHERE item_id = ? ORDER BY level", [it.id]).map((r) => r[0]);
   const sel = $("i-level"); sel.replaceChildren(...lvls.map((l) => el("option", { value: l, text: "+" + l, ...(l === lvl ? { selected: "" } : {}) })));
   const star = $("i-star"); star.setAttribute("aria-pressed", String(UI.watch.has(key))); star.textContent = UI.watch.has(key) ? "★ Watching" : "☆ Watch";
-  $("i-table").setAttribute("aria-pressed", String(UI.asTable)); $("i-table").textContent = UI.asTable ? "Show charts" : "Show table";
-  for (const b of $("i-range").children) b.setAttribute("aria-pressed", String(+b.dataset.r === UI.range));
-  for (const b of $("i-trend").children) b.setAttribute("aria-pressed", String(+b.dataset.w === UI.trend));
 
+  const hasCost = lvl === 0 && hasRecipes() && costSeries(it.hrid);
+  $("i-hour-l").classList.toggle("hidden", !hasCost); $("i-artisan-l").classList.toggle("hidden", !hasCost); $("i-speed-l").classList.toggle("hidden", !hasCost); $("i-eff-l").classList.toggle("hidden", !hasCost);
+  $("i-gourmet-l").classList.toggle("hidden", !(hasCost && hasCost.gourmet)); // only when the recipe tree has a cooking or brewing step
   const all = history(it.id, lvl);
-  const cutoff = UI.range ? D.latest.ts - UI.range * 3600 : 0;
-  const pts = all.filter((p) => p.ts >= cutoff);
-  const nowV = all[all.length - 1].v, t = pickThen(UI.windowId), thenIdx = t.snap ? all.find((p) => p.ts === t.snap.ts) : null, thenV = thenIdx ? thenIdx.v : null;
+  renderBrush(all, key);
+  const { lo: rLo, hi: rHi } = rangeNow();
+  const pts = all.filter((p) => p.ts >= rLo && p.ts <= rHi);
   const spreadOf = (v) => (v && v.ask != null && v.bid != null && v.bid > 0 ? ((v.ask - v.bid) / v.bid) * 100 : null);
-
-  const tile = (label, v, d) => el("div", { class: "tile" }, el("div", { class: "l", text: label }), el("div", { class: "v", text: v }), el("div", { class: "d" }, d));
-  const tiles = el("div", { class: "tiles" },
-    tile("Bid (instant sell)", nowV ? full(nowV.bid) : "—", nowV && thenV ? deltaNode(pct(nowV.bid, thenV.bid)) : ""),
-    tile("Ask (instant buy)", nowV ? full(nowV.ask) : "—", nowV && thenV ? deltaNode(pct(nowV.ask, thenV.ask)) : ""),
-    tile("Average trade price, last hour", nowV && nowV.price != null ? full(nowV.price) : "no trades", nowV && thenV && nowV.price != null && thenV.price != null ? deltaNode(pct(nowV.price, thenV.price)) : ""),
-    tile("Units traded, last hour", nowV && nowV.volume != null ? full(nowV.volume) : "none", nowV && thenV && nowV.volume != null && thenV.volume != null ? deltaNode(pct(nowV.volume, thenV.volume)) : ""),
-    tile("Spread", spreadOf(nowV) == null ? "—" : spreadOf(nowV).toFixed(1) + "%", ""));
-  const head = el("p", { class: "summary", text: t.snap ? `Changes compare ${when(D.latest.ts)} with ${when(t.snap.ts)}.` : "" });
 
   const ts = pts.map((p) => p.ts), g = (f) => pts.map((p) => (p.v ? p.v[f] : null));
   const bid = g("bid"), ask = g("ask"), avg = g("price"), vol = g("volume"), spread = pts.map((p) => spreadOf(p.v));
   const value = pts.map((p) => (p.v && p.v.price != null && p.v.volume != null ? p.v.price * p.v.volume : null));
-
-  if (UI.asTable) {
-    const tbl = el("table"); tbl.append(el("thead", {}, el("tr", {}, ...["Time", "Bid", "Ask", "Spread", "Average trade price", "Units traded", "Value traded"].map((h) => el("th", { scope: "col", text: h })))));
-    const tb = el("tbody");
-    for (let i = pts.length - 1, n = 0; i >= 0 && n < 500; i--, n++)
-      tb.append(el("tr", {}, el("td", { text: when(ts[i]) }), el("td", { text: pts[i].v ? full(bid[i]) : "not listed" }), el("td", { text: full(ask[i]) }),
-        el("td", { text: spread[i] == null ? "—" : spread[i].toFixed(1) + "%" }), el("td", { text: full(avg[i]) }), el("td", { text: full(vol[i]) }), el("td", { text: value[i] == null ? "—" : fmt(value[i]) })));
-    tbl.append(tb);
-    body.replaceChildren(tiles, head, el("div", { class: "card" }, el("div", { class: "tablewrap" }, tbl)));
-    return;
-  }
 
   const cssv = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const cBid = cssv("--sell"), c2 = cssv("--s1"), cAsk = cssv("--buy"), surface = cssv("--surface"); // bid = what you get when selling (red), ask = what you pay when buying (green)
   const traded = vol.filter((v) => v != null && v > 0), vmin = traded.length ? Math.min(...traded) : 0, vmax = traded.length ? Math.max(...traded) : 0;
   const style = volStyle(vmax, c2, surface);
   const host = el("div");
+  const cost = lvl === 0 ? costParts(it, all, pts) : null; // recipe cost lines, drawn in the same chart
 
   // legend: the three lines, the band between bid and ask, and a small ramp showing what thin/pale and thick/strong mean
   const ramp = sv("svg", { width: 120, height: 16, viewBox: "0 0 120 16", "aria-hidden": "true" });
@@ -676,45 +664,238 @@ function renderItem() {
   const legend = el("div", { class: "legend" },
     el("span", {}, el("span", { class: "key", style: "border-color:" + cAsk }), "Ask"),
     el("span", {}, el("span", { class: "key", style: "border-color:" + cBid }), "Bid"),
-    el("span", { style: "display:inline-flex;align-items:center;gap:8px" }, "Average trade price: thicker and stronger = more units traded that hour", ramp,
+    el("span", { style: "display:inline-flex;align-items:center;gap:8px" }, "Avg price (width = units)", ramp,
       el("span", { text: traded.length ? fmt(vmin) + " – " + fmt(vmax) : "no trades" })),
-    el("span", {}, el("span", { class: "dash" }), "Ask and bid trend (" + (UI.trend >= 24 && UI.trend % 24 === 0 ? UI.trend / 24 + " d" : UI.trend + " h") + " average)"),
-    el("span", {}, el("span", { class: "hatch" }), "No snapshots"));
-  body.replaceChildren(tiles, head, el("div", { class: "card" }, el("div", { class: "charthead" }, el("h3", { text: it.name })), el("div", { style: "margin:0 0 8px" }, legend), host));
+    ...(cost ? cost.legend : []),
+    el("span", {}, el("span", { class: "hatch" }), "No data"));
+  body.replaceChildren(el("div", { class: "card" }, el("div", { class: "charthead" }, el("h3", { text: it.name })), el("div", { style: "margin:0 0 8px" }, legend), host));
   if (pts.length < 2) {
     host.replaceWith(el("div", { class: "empty", text: "Only one snapshot in this range – charts need at least two. The history grows every hour." }));
     return;
   }
-  const trendLabel = UI.trend >= 24 && UI.trend % 24 === 0 ? UI.trend / 24 + " d" : UI.trend + " h";
-  const askT = trailingAvg(all, "ask", UI.trend), bidT = trailingAvg(all, "bid", UI.trend);
-  const askTrend = ts.map((t) => askT.get(t)), bidTrend = ts.map((t) => bidT.get(t));
   const pctFmt = (v) => v.toFixed(v < 10 ? 2 : 1) + "%";
   timeChart(host, {
-    title: it.name + ": bid-ask range and average trade price, with units traded shown by the thickness of the line", ts,
-    panels: [{ h: 380, band: { lo: bid, hi: ask, loColor: cBid, hiColor: cAsk }, dashed: [{ vals: askTrend, color: cAsk }, { vals: bidTrend, color: cBid }], vline: { vals: avg, vol, style, base: c2 } }],
+    title: it.name + ": bid-ask range and average trade price, with units traded shown by the thickness of the line" + (cost ? ", and the cost of its ingredients" : ""), ts,
+    panels: [{ h: 380, lines: cost ? cost.lines : undefined, band: { lo: bid, hi: ask, loColor: cBid, hiColor: cAsk }, vline: { vals: avg, vol, style, base: c2 } }],
     tip: [
       { name: "Ask", color: cAsk, vals: ask, none: "no order" },
       { name: "Average trade price", color: c2, vals: avg, none: "no trades" },
       { name: "Bid", color: cBid, vals: bid, none: "no order" },
-      { name: "Units traded", color: null, vals: vol, none: "no trades" },
-      { name: "Value traded", color: null, vals: value, fmt: fmt, none: "—" },
+      ...(cost ? cost.tip : []),
+      { name: "Units traded (value)", color: null, vals: vol, text: (i) => (vol[i] == null ? "no trades" : full(vol[i]) + (value[i] == null ? "" : " (" + fmt(value[i]) + ")")) },
       { name: "Spread", color: null, vals: spread, fmt: pctFmt, none: "—" },
-      { name: "Ask trend (" + trendLabel + " average)", color: cAsk, vals: askTrend, none: "not enough data" },
-      { name: "Bid trend (" + trendLabel + " average)", color: cBid, vals: bidTrend, none: "not enough data" },
     ],
   });
 }
 
-// Trailing average of one field over the last `hours` hours (by time, not by count); needs at least `minN` samples.
-function trailingAvg(all, field, hours, minN = 3) {
-  const out = new Map(); let lo = 0, sum = 0, n = 0; const q = [];
-  for (let i = 0; i < all.length; i++) {
-    const v = all[i].v ? all[i].v[field] : null;
-    if (v != null) { q.push([all[i].ts, v]); sum += v; n++; }
-    while (q.length && q[0][0] < all[i].ts - hours * 3600) { sum -= q[0][1]; n--; q.shift(); }
-    out.set(all[i].ts, n >= minN ? sum / n : null);
+// ------------------------------------------------------------------ range strip
+/* A strip under the item filters that shows the whole history of the item (its ask line) with a selected stretch:
+   drag the left or right handle to move the start or end, drag the stretch itself to move both.  The chart shows only the stretch.
+   Arrow keys on a focused handle move it by an hour (Shift: a day).  The strip is built once per item and is not rebuilt while
+   dragging, so the chart can be redrawn on every move.  Not saved; the default is the last 7 days. */
+const MIN_SPAN = 2 * 3600, BR = { key: "", W: 0, e: null };
+function rangeNow() {
+  const first = D.snaps[0].ts, last = D.latest.ts;
+  let lo = UI.rangeLo ?? Math.max(first, last - 7 * 86400), hi = UI.rangeHi ?? last;
+  hi = Math.min(last, Math.max(hi, first + MIN_SPAN)); lo = Math.max(first, Math.min(lo, hi - MIN_SPAN));
+  return { first, last, lo, hi };
+}
+let brushRaf = 0;
+const redrawSoon = () => { if (!brushRaf) brushRaf = requestAnimationFrame(() => { brushRaf = 0; renderItem(); }); };
+function renderBrush(all, key) {
+  const host = $("i-brush"), { first, last } = rangeNow();
+  if (last - first < 1) { host.replaceChildren(); BR.key = ""; return; }
+  const W = Math.max(280, host.clientWidth || 640), H = 54, HW = 10;
+  if (BR.key !== key || BR.W !== W) {
+    BR.key = key; BR.W = W;
+    const X = (t) => HW / 2 + ((t - first) / (last - first)) * (W - HW);
+    const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, role: "group", "aria-label": "Visible range of the chart" });
+    svg.append(sv("rect", { x: 0, y: 0, width: W, height: H, rx: 6, fill: "var(--surface)", stroke: "var(--border)" }));
+    const v = all.map((p) => (p.v ? (p.v.ask ?? p.v.bid) : null)), vv = v.filter((x) => x != null);
+    if (vv.length) { // overview line of the whole history, gaps where the item was not listed
+      const mn = Math.min(...vv), mx = Math.max(...vv), Y = (x) => H - 8 - ((x - mn) / (mx - mn || 1)) * (H - 16);
+      let d = "", pen = false;
+      all.forEach((p, i) => { if (v[i] == null) { pen = false; return; } d += (pen ? "L" : "M") + X(p.ts).toFixed(1) + " " + Y(v[i]).toFixed(1) + " "; pen = true; });
+      svg.append(sv("path", { d, fill: "none", stroke: "var(--muted)", "stroke-width": 1.3, "stroke-linejoin": "round" }));
+    }
+    const dimL = sv("rect", { y: 0, height: H, fill: "var(--page)", "fill-opacity": 0.7, "pointer-events": "none" });
+    const dimR = sv("rect", { y: 0, height: H, fill: "var(--page)", "fill-opacity": 0.7, "pointer-events": "none" });
+    const sel = sv("rect", { class: "sel", y: 1, height: H - 2, fill: "var(--accent)", "fill-opacity": 0.12, stroke: "var(--accent)", "stroke-width": 1 });
+    const handle = (name) => {
+      const g = sv("g", { class: "h", tabindex: "0", role: "slider", "aria-label": name === "lo" ? "Start of the range" : "End of the range" });
+      g.append(sv("rect", { y: 4, width: HW, height: H - 8, rx: 3, fill: "var(--accent)" }),
+               sv("line", { x1: HW / 2 - 1.5, x2: HW / 2 - 1.5, y1: H / 2 - 7, y2: H / 2 + 7, stroke: "var(--surface)", "stroke-width": 1.2 }),
+               sv("line", { x1: HW / 2 + 1.5, x2: HW / 2 + 1.5, y1: H / 2 - 7, y2: H / 2 + 7, stroke: "var(--surface)", "stroke-width": 1.2 }));
+      return g;
+    };
+    const hl = handle("lo"), hh = handle("hi");
+    svg.append(dimL, dimR, sel, hl, hh);
+    const meta = el("div", { class: "brushmeta" });
+    host.replaceChildren(svg, meta);
+    BR.e = { svg, dimL, dimR, sel, hl, hh, meta, X, HW, W, first, last };
+
+    const tAt = (cx) => { const r = svg.getBoundingClientRect(); return first + ((((cx - r.left) / r.width) * W - HW / 2) / (W - HW)) * (last - first); };
+    const drag = (el_, onMove) => { // pointer capture keeps the drag going outside the strip
+      el_.addEventListener("pointerdown", (e) => {
+        e.preventDefault(); el_.setPointerCapture(e.pointerId);
+        const t0 = tAt(e.clientX), r0 = rangeNow();
+        const move = (ev) => { onMove(tAt(ev.clientX), t0, r0); updateBrush(); redrawSoon(); };
+        const up = () => { el_.removeEventListener("pointermove", move); el_.removeEventListener("pointerup", up); el_.removeEventListener("pointercancel", up); };
+        el_.addEventListener("pointermove", move); el_.addEventListener("pointerup", up); el_.addEventListener("pointercancel", up);
+      });
+    };
+    const clampLo = (t, hi) => Math.max(first, Math.min(t, hi - MIN_SPAN)), clampHi = (t, lo) => Math.min(last, Math.max(t, lo + MIN_SPAN));
+    drag(hl, (t, t0, r0) => { UI.rangeLo = clampLo(t, r0.hi); UI.rangeHi = r0.hi; });
+    drag(hh, (t, t0, r0) => { UI.rangeHi = clampHi(t, r0.lo); UI.rangeLo = r0.lo; });
+    drag(sel, (t, t0, r0) => { const span = r0.hi - r0.lo, lo = Math.max(first, Math.min(r0.lo + (t - t0), last - span)); UI.rangeLo = lo; UI.rangeHi = lo + span; });
+    for (const [g, which] of [[hl, "lo"], [hh, "hi"]]) g.addEventListener("keydown", (e) => {
+      const dir = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+      if (!dir) return;
+      e.preventDefault();
+      const r = rangeNow(), step = (e.shiftKey ? 86400 : 3600) * dir;
+      if (which === "lo") { UI.rangeLo = clampLo(r.lo + step, r.hi); UI.rangeHi = r.hi; } else { UI.rangeHi = clampHi(r.hi + step, r.lo); UI.rangeLo = r.lo; }
+      updateBrush(); redrawSoon();
+    });
   }
+  updateBrush();
+}
+function updateBrush() {
+  const e = BR.e, { lo, hi } = rangeNow(), x0 = e.X(lo), x1 = e.X(hi), span = hi - lo;
+  e.sel.setAttribute("x", x0); e.sel.setAttribute("width", Math.max(1, x1 - x0));
+  e.dimL.setAttribute("x", 0); e.dimL.setAttribute("width", Math.max(0, x0));
+  e.dimR.setAttribute("x", x1); e.dimR.setAttribute("width", Math.max(0, e.W - x1));
+  e.hl.setAttribute("transform", `translate(${x0 - e.HW / 2} 0)`); e.hh.setAttribute("transform", `translate(${x1 - e.HW / 2} 0)`);
+  e.hl.setAttribute("aria-valuenow", lo); e.hh.setAttribute("aria-valuenow", hi);
+  e.meta.textContent = when(lo) + " – " + when(hi) + "  ·  " + (span < 48 * 3600 ? Math.round(span / 3600) + " h" : (span / 86400).toFixed(1) + " d");
+}
+
+// ------------------------------------------------------------------ craft cost
+/* What it costs to buy the ingredients of an item, at every snapshot, from the recipes in item_recipe
+   via depthRows() (depth 1 = direct inputs, 2 = the inputs of those, ...; quantities per unit, summed within a depth, artisan and gourmet applied;
+   a base item appears only at the depth where it is reached).  A "cut" at depth d = everything at depth d plus the base items
+   that appeared at shallower depths: a complete shopping list.  Two lines, each priced at ask and at bid:
+     parts  = cut at depth 1 (buy the direct ingredients)
+     raw    = cut at the deepest depth (craft every step from base items)
+   (A "cheapest cut" line was dropped: in 99.7% of cases it equals the lower of these two.)
+   A snapshot where any ingredient of a cut has no order gives no value for that cut. */
+const COIN = "/items/coin";
+function hasRecipes() {
+  if (hasDepth == null) {
+    hasDepth = rows("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'item_recipe'").length > 0;
+    recipes = new Map(); // item -> { out: units per craft, skill, rows: [{ ing, count (per craft), up (upgrade item) }] }
+    if (hasDepth) for (const [item, ing, count, up, out, skill] of rows("SELECT item_hrid, ingredient_hrid, count, is_upgrade, output_count, skill FROM item_recipe")) {
+      if (!recipes.has(item)) recipes.set(item, { out, skill, rows: [] });
+      recipes.get(item).rows.push({ ing, count, up: up === 1 });
+    }
+    craftSet = new Set(recipes.keys());
+    const hasTime = rows("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'item_craft_time'").length > 0;
+    craftSecs = new Map(hasTime ? rows("SELECT item_hrid, secs FROM item_craft_time") : []); // crafting seconds per unit; empty = no time data
+  }
+  return hasDepth;
+}
+
+const GOURMET_SKILLS = new Set(["cooking", "brewing"]);
+// Expected units one craft makes: the recipe's output, plus the gourmet chance of one free extra item for cooking and brewing.
+const expectedOut = (r) => r.out + (GOURMET_SKILLS.has(r.skill) ? UI.gourmet / 100 : 0);
+
+/* The ingredients of one unit of an item at every depth of its recipe tree, with the artisan and gourmet buffs applied at each step:
+   - artisan: every ingredient except the upgrade item needs ceil(count / (1 + artisan%)) per craft (coin and shards included).
+     Rounding is per craft, so it cannot be done on summed totals.
+   - gourmet (cooking and brewing only): a craft makes out + gourmet% items on average, so per unit everything is divided by that
+     expected output instead of by the plain output count (the upgrade item too).
+   Returns { rows: [[depth, ingredient, qty], ...], gourmet: true if a gourmet step is in the tree }.
+   Depth 1 = the direct inputs; quantities of the same ingredient are summed within a depth.
+   A base item (no recipe) appears only at the depth where it is reached. */
+function depthRows(hrid) {
+  const f = 1 + UI.artisan / 100, out = [];
+  let cur = new Map([[hrid, 1]]), gourmet = false;
+  for (let d = 1; d <= 40 && cur.size; d++) {
+    const nxt = new Map();
+    for (const [item, q] of cur) {
+      const r = recipes.get(item);
+      if (!r) continue;
+      if (GOURMET_SKILLS.has(r.skill)) gourmet = true;
+      const e = expectedOut(r);
+      for (const x of r.rows) {
+        const n = x.up ? x.count : Math.ceil(x.count / f - 1e-9); // -1e-9: float noise must not round an exact result up
+        nxt.set(x.ing, (nxt.get(x.ing) || 0) + (q * n) / e);
+      }
+    }
+    for (const [ing, q] of nxt) out.push([d, ing, q]);
+    cur = nxt;
+  }
+  return { rows: out, gourmet };
+}
+/* Crafting seconds per unit of an item.  craftSecs holds base time / output count, so base time per craft = that x out.
+   - speed: the action time is divided by speed% / 100 (133.75% -> 30 s becomes 22.4 s).
+   - efficiency: each action does 1 + efficiency% crafts on average (126% -> always 2, 26% chance of a 3rd); the extra crafts are not free
+     (they use ingredients as usual), so efficiency only shortens the time.
+   - gourmet: a craft makes more than `out` units on average, so each unit takes less (cooking and brewing only). */
+const unitSecs = (item) => {
+  const r = recipes.get(item);
+  return r ? ((craftSecs.get(item) || 0) * r.out) / expectedOut(r) / (UI.speed / 100) / (1 + UI.eff / 100) : 0;
+};
+
+function costSeries(hrid) { // arrays aligned with D.snaps; null = recipe unknown or an ingredient is not on the market
+  const ckey = hrid + "|" + UI.artisan + "|" + UI.gourmet + "|" + UI.speed + "|" + UI.eff;
+  if (costCache.has(ckey)) return costCache.get(ckey);
+  const dr = recipes.has(hrid) ? depthRows(hrid) : { rows: [], gourmet: false }, rs = dr.rows;
+  if (!rs.length) { costCache.set(ckey, null); return null; }
+  const maxD = Math.max(...rs.map((r) => r[0])), cuts = [];
+  for (let d = 1; d <= maxD; d++) cuts.push(rs.filter((r) => r[0] === d || (r[0] < d && !craftSet.has(r[1]))).map((r) => [r[1], r[2]]));
+  const idOf = new Map([...D.items.values()].map((i) => [i.hrid, i.id])), H = new Map();
+  for (const r of rs) if (!H.has(r[1])) H.set(r[1], r[1] !== COIN && idOf.has(r[1]) ? history(idOf.get(r[1]), 0) : null);
+  const n = D.snaps.length, out = {};
+  for (const f of ["ask", "bid"]) out[f] = { parts: new Array(n).fill(null), raw: new Array(n).fill(null) };
+  for (let t = 0; t < n; t++) for (const f of ["ask", "bid"]) {
+    let first = null, last = null;
+    cuts.forEach((c, k) => {
+      let sum = 0;
+      for (const [h, q] of c) {
+        let v;
+        if (h === COIN) v = 1; else { const hh = H.get(h); v = hh && hh[t].v ? hh[t].v[f] : null; }
+        if (v == null) { sum = null; break; }
+        sum += q * v;
+      }
+      if (k === 0) first = sum;
+      if (k === cuts.length - 1) last = sum;
+    });
+    out[f].parts[t] = first; out[f].raw[t] = last;
+  }
+  // crafting time: this item once, plus every craftable ingredient above the cut (qty per unit x its seconds per unit).  Gathering is not counted.
+  const own = unitSecs(hrid);
+  out.secs = craftSecs.size ? { parts: own, raw: own + rs.reduce((n, r) => n + r[2] * unitSecs(r[1]), 0) } : null;
+  out.gourmet = dr.gourmet;
+  costCache.set(ckey, out);
   return out;
+}
+
+// The four cost lines for the item chart (null when the item has no recipe or the database has no recipe table).
+function costParts(it, all, pts) {
+  if (!hasRecipes()) return null;
+  const cs = costSeries(it.hrid);
+  if (!cs) return null;
+  const off = Math.max(0, all.indexOf(pts[0])), cut = (a) => a.slice(off, off + pts.length); // pts is the selected stretch of all
+  const cParts = getComputedStyle(document.documentElement).getPropertyValue("--cost1").trim(), cRaw = getComputedStyle(document.documentElement).getPropertyValue("--cost2").trim();
+  const A = cs.ask, dash = "7 5", per = UI.hour / 3600; // only ask-priced costs: producing is acquiring, so it is compared with buying now
+  const withTime = (arr, secs) => cut(arr).map((v) => (v == null ? null : v + (secs || 0) * per)); // time cost is the same at every snapshot
+  const sp = cs.secs ? cs.secs.parts : 0, sr = cs.secs ? cs.secs.raw : 0;
+  const dur = (t) => (t < 90 ? Math.round(t) + " s" : t < 5400 ? Math.round(t / 60) + " min" : (t / 3600).toFixed(1) + " h"); // crafting time, real time with speed and efficiency
+  const row = (name, color, arr, secs) => ({ name, color, dash: true, vals: arr, text: (i) => (arr[i] == null ? "not priced" : full(arr[i]) + (cs.secs ? " (" + dur(secs) + ")" : "")) });
+  return {
+    lines: [
+      { vals: withTime(A.parts, sp), color: cParts, dash },
+      { vals: withTime(A.raw, sr), color: cRaw, dash },
+    ],
+    tip: [
+      row("1-Depth cost (time)", cParts, withTime(A.parts, sp), sp),
+      row("Max-depth cost (time)", cRaw, withTime(A.raw, sr), sr),
+    ],
+    legend: [
+      el("span", {}, el("span", { class: "key dashed", style: "--k:" + cParts }), "1-Depth cost"),
+      el("span", {}, el("span", { class: "key dashed", style: "--k:" + cRaw }), "Max-depth cost"),
+    ],
+  };
 }
 
 function openItem(iid, lvl) { UI.item = iid; UI.itemLevel = lvl ?? 0; setTab("item"); }
@@ -771,7 +952,7 @@ function setTab(tab) {
     $("p-" + t).classList.toggle("hidden", t !== tab);
   }
   $("f-minvol-l").classList.toggle("hidden", tab !== "movers"); $("f-search-l").classList.toggle("hidden", tab !== "movers");
-  $("f-dir-l").classList.toggle("hidden", tab !== "movers"); $("f-level").parentElement.classList.toggle("hidden", tab !== "movers");
+  $("f-dir-l").classList.toggle("hidden", tab !== "movers"); $("f-window").parentElement.classList.toggle("hidden", tab === "item"); $("f-level").parentElement.classList.toggle("hidden", tab !== "movers");
   $("windownote").replaceChildren();
   render();
 }
@@ -827,10 +1008,12 @@ for (const b of $("f-dir-l").querySelectorAll("button")) b.addEventListener("cli
 });
 $("i-search").addEventListener("change", (e) => { const it = D.byName.get(e.target.value); if (it) { UI.item = it.id; UI.itemLevel = 0; renderItem(); } });
 $("i-level").addEventListener("change", (e) => { UI.itemLevel = +e.target.value; renderItem(); });
-for (const b of $("i-range").children) b.addEventListener("click", () => { UI.range = +b.dataset.r; store.set("mw.range", UI.range); renderItem(); });
-for (const b of $("i-trend").children) b.addEventListener("click", () => { UI.trend = +b.dataset.w; store.set("mw.trend", UI.trend); renderItem(); });
 $("i-star").addEventListener("click", () => { if (UI.item == null) return; toggleWatch(UI.item + "|" + UI.itemLevel); renderItem(); });
-$("i-table").addEventListener("click", () => { UI.asTable = !UI.asTable; renderItem(); });
+$("i-hour").addEventListener("input", (e) => { const v = parseFloat(e.target.value); UI.hour = v >= 0 ? v * 1e6 : 0; renderItem(); });
+$("i-artisan").addEventListener("input", (e) => { const v = parseFloat(e.target.value); UI.artisan = v >= 0 ? v : 0; costCache.clear(); renderItem(); });
+$("i-speed").addEventListener("input", (e) => { const v = parseFloat(e.target.value); UI.speed = v > 0 ? v : 100; renderItem(); });
+$("i-eff").addEventListener("input", (e) => { const v = parseFloat(e.target.value); UI.eff = v >= 0 ? v : 0; renderItem(); });
+$("i-gourmet").addEventListener("input", (e) => { const v = parseFloat(e.target.value); UI.gourmet = v >= 0 ? v : 0; costCache.clear(); renderItem(); });
 let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (UI.tab === "item") renderItem(); }, 150); });
 
 // theme toggle: auto -> light -> dark

@@ -6,6 +6,9 @@
 Schema
     item_ingredient_depth(item_hrid, depth, ingredient_hrid, qty)
                                         recipe tree per depth, reloaded every run from --depths (see load_depths)
+    item_recipe(item_hrid, ingredient_hrid, count, is_upgrade, output_count, skill)
+                                        one row per recipe ingredient, reloaded every run from --recipes (see load_recipes)
+    item_craft_time(item_hrid, secs)    crafting seconds per unit of each craftable item, reloaded every run from --craft-times
     item(item_id, hrid)                 one row per item, name stored once
     snapshot(snapshot_id, ts)           one row per imported snapshot (ts = the game's unix timestamp)
     obs(item_id, level, snapshot_id,    one row per (item, enhancement level) *whenever it changed*
@@ -133,12 +136,69 @@ def load_depths(con, path):
     print(f"loaded {len(rows)} rows into item_ingredient_depth")
 
 
+CRAFT_SCHEMA = """
+DROP TABLE IF EXISTS item_craft_time;
+CREATE TABLE item_craft_time (
+  item_hrid TEXT NOT NULL PRIMARY KEY,
+  secs REAL NOT NULL
+) WITHOUT ROWID;
+"""
+
+
+def load_craft_times(con, path):
+    """(Re)load item_craft_time from the CSV exported by the game-data project: crafting seconds per unit of each
+    craftable item (action base time / output count, base speed, no gear).  Together with item_ingredient_depth
+    it gives the crafting time of any recipe cut."""
+    if not os.path.exists(path):
+        print(f"{path} not found - craft time table left as it is")
+        return
+    with gzip.open(path, "rt", encoding="utf-8", newline="") as f:
+        rows = [(r["item_hrid"], float(r["secs"])) for r in csv.DictReader(f)]
+    with con:
+        con.executescript(CRAFT_SCHEMA)
+        con.executemany("INSERT INTO item_craft_time VALUES (?,?)", rows)
+    print(f"loaded {len(rows)} rows into item_craft_time")
+
+
+RECIPE_SCHEMA = """
+DROP TABLE IF EXISTS item_recipe;
+CREATE TABLE item_recipe (
+  item_hrid TEXT NOT NULL,
+  ingredient_hrid TEXT NOT NULL,
+  count REAL NOT NULL,
+  is_upgrade INTEGER NOT NULL,
+  output_count REAL NOT NULL,
+  skill TEXT NOT NULL,
+  PRIMARY KEY (item_hrid, ingredient_hrid, is_upgrade)
+) WITHOUT ROWID;
+"""
+
+
+def load_recipes(con, path):
+    """(Re)load item_recipe from the CSV exported by the game-data project: one row per ingredient of each craftable
+    item, exactly as the game defines the recipe.  count = consumed per craft, output_count = units one craft makes,
+    is_upgrade = 1 for the upgrade item (the base item an upgrade recipe consumes; not reduced by the artisan buff),
+    skill = the crafting skill (the gourmet buff only applies to cooking and brewing).
+    The dashboard walks these rows to get the ingredients at every depth, applying artisan at each step."""
+    if not os.path.exists(path):
+        print(f"{path} not found - recipe table left as it is")
+        return
+    with gzip.open(path, "rt", encoding="utf-8", newline="") as f:
+        rows = [(r["item_hrid"], r["ingredient_hrid"], float(r["count"]), int(r["is_upgrade"]), float(r["output_count"]), r["skill"])
+                for r in csv.DictReader(f)]
+    with con:
+        con.executescript(RECIPE_SCHEMA)
+        con.executemany("INSERT INTO item_recipe VALUES (?,?,?,?,?,?)", rows)
+    print(f"loaded {len(rows)} rows into item_recipe")
+
+
+def file_timestamp(path):
+    m = re.search(r"marketplace_(\d+)\.json", os.path.basename(path))
+    return int(m.group(1)) if m else 0
+
+
 def snapshot_files(folder):
-    files = glob.glob(os.path.join(folder, "marketplace_*.json*"))
-    def key(p):
-        m = re.search(r"marketplace_(\d+)\.json", os.path.basename(p))
-        return int(m.group(1)) if m else 0
-    return sorted(files, key=key)
+    return sorted(glob.glob(os.path.join(folder, "marketplace_*.json*")), key=file_timestamp)
 
 
 def main():
@@ -146,6 +206,8 @@ def main():
     ap.add_argument("--db", default="market.db")
     ap.add_argument("--snapshots", default="snapshots")
     ap.add_argument("--depths", default="item_ingredient_depth.csv.gz", help="recipe depth table (CSV, gzip) to load")
+    ap.add_argument("--craft-times", default="item_craft_time.csv.gz", help="crafting seconds per unit (CSV, gzip) to load")
+    ap.add_argument("--recipes", default="item_recipe.csv.gz", help="recipes (CSV, gzip) to load")
     ap.add_argument("--rebuild", action="store_true", help="delete the database and import everything again")
     args = ap.parse_args()
 
@@ -154,13 +216,25 @@ def main():
     con = sqlite3.connect(args.db)
     con.executescript(SCHEMA)
 
+    # The database mirrors the snapshot folder.  It stores only changes, so one snapshot cannot be cut out of it; if a file was
+    # deleted on purpose (an old snapshot that should be forgotten), start over from the files that are left.
+    files = snapshot_files(args.snapshots)
+    have = {file_timestamp(p) for p in files}
+    stale = {r[0] for r in con.execute("SELECT ts FROM snapshot")} - have
+    if stale and have:  # never rebuild from an empty folder: that would be a broken checkout, not a deletion
+        print(f"{len(stale)} snapshot(s) in the database have no file any more - rebuilding from the {len(have)} files")
+        con.close()
+        os.remove(args.db)
+        con = sqlite3.connect(args.db)
+        con.executescript(SCHEMA)
+
     done = {r[0] for r in con.execute("SELECT ts FROM snapshot")}
     newest = max(done) if done else 0
     ids = dict(con.execute("SELECT hrid, item_id FROM item"))
     state = current_state(con)
 
     imported = 0
-    for path in snapshot_files(args.snapshots):
+    for path in files:
         data = read_snapshot(path)
         ts = data["timestamp"]
         if ts in done:
@@ -176,6 +250,8 @@ def main():
     if not imported:
         print("nothing new to import")
     load_depths(con, args.depths)
+    load_craft_times(con, args.craft_times)
+    load_recipes(con, args.recipes)
     con.close()
 
 
