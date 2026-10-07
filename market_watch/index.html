@@ -89,6 +89,10 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
 .brush .h { cursor: ew-resize; } .brush .h:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .brush .sel { cursor: grab; } .brush .sel:active { cursor: grabbing; }
 .brushmeta { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.legend .lg { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; display: inline-flex; align-items: center; }
+.legend .lg[aria-pressed="false"] { opacity: .4; text-decoration: line-through; }
+.legend .lg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.dotkey { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: middle; margin: 0 7px 0 2px; }
 .chart { position: relative; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border);
@@ -337,7 +341,8 @@ const UI = {
   tab: "movers", windowId: store.get("mw.window", "24h"), level: 0, minvol: store.get("mw.minvol", 100),
   search: "", dir: "all", sort: { key: "abs", dir: -1 }, limit: 250,
   item: null, itemLevel: 0, hour: 0, // hour: coins per real crafting hour (the box is in millions)
-  artisan: 11.22, gourmet: 13.46, speed: 133.75, eff: 126, rangeLo: null, rangeHi: null, // range strip; null = default (last 7 days)
+  artisan: 11.22, gourmet: 13.46, speed: 133.75, eff: 126, rangeLo: null, rangeHi: null, hidden: new Set(), // hidden: chart series switched off by clicking their legend entry (ask, bid, avg, c1, c2); not saved
+  // range strip; null = default (last 7 days)
   watch: new Set(store.get("mw.watch", [])),
 };
 const saveWatch = () => store.set("mw.watch", [...UI.watch]);
@@ -444,6 +449,7 @@ const sv = (tag, attrs = {}) => { const n = document.createElementNS(SVGNS, tag)
 // Volume is shown on the average-price line itself: thicker and more saturated = more units traded that hour.
 const hex2rgb = (h) => { const n = parseInt(h.replace("#", ""), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 const mixHex = (bg, fg, t) => { const a = hex2rgb(bg), b = hex2rgb(fg); return "#" + [0, 1, 2].map((i) => Math.round(a[i] + (b[i] - a[i]) * t).toString(16).padStart(2, "0")).join(""); };
+const dotR = (style, v) => style.w(v) / 2 + 1.5; // dot radius for a volume: 2.25 to 4 px
 function volStyle(vmax, base, surface) {
   const f = (v) => Math.sqrt(Math.max(0, Math.min(1, (v || 0) / (vmax || 1)))); // sqrt: area-like, so small hours stay visible
   const [r, g, b] = hex2rgb(surface), dark = (0.299 * r + 0.587 * g + 0.114 * b) < 128;
@@ -541,25 +547,9 @@ function timeChart(host, o) {
       if (last != null) svg.append(sv("circle", { cx: X(ts[last]), cy: Y(l.vals[last]), r: 4, fill: l.color, stroke: "var(--surface)", "stroke-width": 2 }));
       labels.push({ vals: l.vals, Y, color: l.color });
     }
-    if (p.vline) { // average trade price; thickness + shade = units traded that hour
+    if (p.vline) { // average trade price: one dot per hour with trades; size + shade = units traded that hour
       const { vals: pv, vol, style } = p.vline;
-      const defs = sv("defs"); svg.append(defs);
-      const pts = (i) => ({ x: X(ts[i]), y: Y(pv[i]), w: style.w(vol[i]), c: style.color(vol[i]) });
-      let gid = 0;
-      for (const seg of segments([pv])) {
-        for (let k = 1; k < seg.length; k++) {
-          const a = pts(seg[k - 1]), b = pts(seg[k]), id = "vg" + (gid++) + "_" + Math.round(Math.random() * 1e6);
-          const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
-          if (len < 0.01) continue;
-          const nx = -dy / len, ny = dx / len; // unit normal: the ribbon is as thick as asked at any slope, not just on flat stretches
-          const g = sv("linearGradient", { id, gradientUnits: "userSpaceOnUse", x1: a.x, y1: a.y, x2: b.x, y2: b.y });
-          g.append(sv("stop", { offset: 0, "stop-color": a.c }), sv("stop", { offset: 1, "stop-color": b.c }));
-          defs.append(g);
-          const P = (q, sgn) => `${(q.x + sgn * nx * q.w / 2).toFixed(2)},${(q.y + sgn * ny * q.w / 2).toFixed(2)}`;
-          svg.append(sv("polygon", { points: `${P(a, 1)} ${P(b, 1)} ${P(b, -1)} ${P(a, -1)}`, fill: `url(#${id})` }));
-        }
-        for (const i of seg) { const q = pts(i); svg.append(sv("circle", { cx: q.x, cy: q.y, r: q.w / 2, fill: q.c })); } // round joins and lone hours
-      }
+      pv.forEach((v, i) => { if (v != null) svg.append(sv("circle", { cx: X(ts[i]), cy: Y(v), r: dotR(style, vol[i]), fill: style.color(vol[i]) })); });
       hoverDots.push({ vals: pv, Y, color: p.vline.base }); labels.push({ vals: pv, Y, color: p.vline.base });
     }
     for (const l of p.lines || []) hoverDots.push({ vals: l.vals, Y, color: l.color });
@@ -650,23 +640,23 @@ function renderItem() {
 
   const cssv = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const cBid = cssv("--sell"), c2 = cssv("--s1"), cAsk = cssv("--buy"), surface = cssv("--surface"); // bid = what you get when selling (red), ask = what you pay when buying (green)
-  const traded = vol.filter((v) => v != null && v > 0), vmin = traded.length ? Math.min(...traded) : 0, vmax = traded.length ? Math.max(...traded) : 0;
+  const traded = vol.filter((v) => v != null && v > 0), vmax = traded.length ? Math.max(...traded) : 0;
   const style = volStyle(vmax, c2, surface);
   const host = el("div");
   const cost = lvl === 0 ? costParts(it, all, pts) : null; // recipe cost lines, drawn in the same chart
 
-  // legend: the three lines, the band between bid and ask, and a small ramp showing what thin/pale and thick/strong mean
-  const ramp = sv("svg", { width: 120, height: 16, viewBox: "0 0 120 16", "aria-hidden": "true" });
-  [0, 0.25, 0.5, 0.75, 1].forEach((f, k) => {
-    const v = vmax * f * f;
-    ramp.append(sv("line", { x1: 2 + k * 24, x2: 22 + k * 24, y1: 8, y2: 8, stroke: style.color(v), "stroke-width": style.w(v), "stroke-linecap": "round" }));
-  });
+  // legend: ask and bid lines, the average-price dot, the cost lines, and the hatching for stretches without snapshots
+  const off = (id) => UI.hidden.has(id);
+  const lg = (id, swatch, label) => { // a legend entry that switches its line off and on
+    const b = el("button", { class: "lg", type: "button", "aria-pressed": String(!off(id)), title: "Click to hide or show" }, swatch, label);
+    b.addEventListener("click", () => { if (off(id)) UI.hidden.delete(id); else UI.hidden.add(id); renderItem(); });
+    return b;
+  };
   const legend = el("div", { class: "legend" },
-    el("span", {}, el("span", { class: "key", style: "border-color:" + cAsk }), "Ask"),
-    el("span", {}, el("span", { class: "key", style: "border-color:" + cBid }), "Bid"),
-    el("span", { style: "display:inline-flex;align-items:center;gap:8px" }, "Avg price (width = units)", ramp,
-      el("span", { text: traded.length ? fmt(vmin) + " – " + fmt(vmax) : "no trades" })),
-    ...(cost ? cost.legend : []),
+    lg("ask", el("span", { class: "key", style: "border-color:" + cAsk }), "Ask"),
+    lg("bid", el("span", { class: "key", style: "border-color:" + cBid }), "Bid"),
+    lg("avg", el("span", { class: "dotkey", style: "background:" + c2 }), "Avg price"),
+    ...(cost ? cost.legend.map((e) => lg(e.id, e.swatch, e.label)) : []),
     el("span", {}, el("span", { class: "hatch" }), "No data"));
   body.replaceChildren(el("div", { class: "card" }, el("div", { class: "charthead" }, el("h3", { text: it.name })), el("div", { style: "margin:0 0 8px" }, legend), host));
   if (pts.length < 2) {
@@ -674,17 +664,21 @@ function renderItem() {
     return;
   }
   const pctFmt = (v) => v.toFixed(v < 10 ? 2 : 1) + "%";
+  const showAsk = !off("ask"), showBid = !off("bid");
+  const lines = [...(cost ? cost.lines.filter((l) => !off(l.id)) : [])];
+  if (showAsk && !showBid) lines.push({ vals: ask, color: cAsk }); // the band needs both edges; one visible edge is a plain line
+  if (!showAsk && showBid) lines.push({ vals: bid, color: cBid });
   timeChart(host, {
-    title: it.name + ": bid-ask range and average trade price, with units traded shown by the thickness of the line" + (cost ? ", and the cost of its ingredients" : ""), ts,
-    panels: [{ h: 380, lines: cost ? cost.lines : undefined, band: { lo: bid, hi: ask, loColor: cBid, hiColor: cAsk }, vline: { vals: avg, vol, style, base: c2 } }],
+    title: it.name + ": bid-ask range and average trade price, with units traded shown by the size of the dots" + (cost ? ", and the cost of its ingredients" : ""), ts,
+    panels: [{ h: 380, lines, band: showAsk && showBid ? { lo: bid, hi: ask, loColor: cBid, hiColor: cAsk } : undefined, vline: off("avg") ? undefined : { vals: avg, vol, style, base: c2 } }],
     tip: [
-      { name: "Ask", color: cAsk, vals: ask, none: "no order" },
-      { name: "Average trade price", color: c2, vals: avg, none: "no trades" },
-      { name: "Bid", color: cBid, vals: bid, none: "no order" },
+      { id: "ask", name: "Ask", color: cAsk, vals: ask, none: "no order" },
+      { id: "avg", name: "Average trade price", color: c2, vals: avg, none: "no trades" },
+      { id: "bid", name: "Bid", color: cBid, vals: bid, none: "no order" },
       ...(cost ? cost.tip : []),
       { name: "Units traded (value)", color: null, vals: vol, text: (i) => (vol[i] == null ? "no trades" : full(vol[i]) + (value[i] == null ? "" : " (" + fmt(value[i]) + ")")) },
       { name: "Spread", color: null, vals: spread, fmt: pctFmt, none: "—" },
-    ],
+    ].filter((r) => !r.id || !off(r.id)),
   });
 }
 
@@ -881,19 +875,19 @@ function costParts(it, all, pts) {
   const withTime = (arr, secs) => cut(arr).map((v) => (v == null ? null : v + (secs || 0) * per)); // time cost is the same at every snapshot
   const sp = cs.secs ? cs.secs.parts : 0, sr = cs.secs ? cs.secs.raw : 0;
   const dur = (t) => (t < 90 ? Math.round(t) + " s" : t < 5400 ? Math.round(t / 60) + " min" : (t / 3600).toFixed(1) + " h"); // crafting time, real time with speed and efficiency
-  const row = (name, color, arr, secs) => ({ name, color, dash: true, vals: arr, text: (i) => (arr[i] == null ? "not priced" : full(arr[i]) + (cs.secs ? " (" + dur(secs) + ")" : "")) });
+  const row = (id, name, color, arr, secs) => ({ id, name, color, dash: true, vals: arr, text: (i) => (arr[i] == null ? "not priced" : full(arr[i]) + (cs.secs ? " (" + dur(secs) + ")" : "")) });
   return {
     lines: [
-      { vals: withTime(A.parts, sp), color: cParts, dash },
-      { vals: withTime(A.raw, sr), color: cRaw, dash },
+      { id: "c1", vals: withTime(A.parts, sp), color: cParts, dash },
+      { id: "c2", vals: withTime(A.raw, sr), color: cRaw, dash },
     ],
     tip: [
-      row("1-Depth cost (time)", cParts, withTime(A.parts, sp), sp),
-      row("Max-depth cost (time)", cRaw, withTime(A.raw, sr), sr),
+      row("c1", "1 step craft (time)", cParts, withTime(A.parts, sp), sp),
+      row("c2", "Full craft (time)", cRaw, withTime(A.raw, sr), sr),
     ],
     legend: [
-      el("span", {}, el("span", { class: "key dashed", style: "--k:" + cParts }), "1-Depth cost"),
-      el("span", {}, el("span", { class: "key dashed", style: "--k:" + cRaw }), "Max-depth cost"),
+      { id: "c1", swatch: el("span", { class: "key dashed", style: "--k:" + cParts }), label: "1 step craft" },
+      { id: "c2", swatch: el("span", { class: "key dashed", style: "--k:" + cRaw }), label: "Full craft" },
     ],
   };
 }
