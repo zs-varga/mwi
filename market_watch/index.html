@@ -83,6 +83,7 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
 .hatch { display: inline-block; width: 14px; height: 10px; vertical-align: middle; margin-right: 6px; border-radius: 2px; border: 1px solid var(--axis);
   background: repeating-linear-gradient(45deg, var(--axis) 0 1px, transparent 1px 4px); }
 .key { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+.key.dotted { border-top: 0; height: 2px; background: repeating-linear-gradient(90deg, var(--k) 0 2px, transparent 2px 5px); }
 .key.dashed { border-top: 0; height: 2px; background: repeating-linear-gradient(90deg, var(--k) 0 4px, transparent 4px 7px); }
 .brush { margin: 0 0 14px; }
 .brush svg { display: block; width: 100%; height: auto; touch-action: none; user-select: none; }
@@ -345,6 +346,7 @@ const UI = {
   // range strip; null = default (last 7 days)
   watch: new Set(store.get("mw.watch", [])),
 };
+const MARKET_TAX = 0.04; // fee taken from the proceeds of a sale (4%); only used for the revenue lines
 const saveWatch = () => store.set("mw.watch", [...UI.watch]);
 
 // ------------------------------------------------------------------ movers
@@ -593,7 +595,7 @@ function timeChart(host, o) {
     tip.replaceChildren(el("div", { class: "t", text: when(ts[i]) }));
     for (const r of o.tip) {
       const v = r.vals[i];
-      const key = el("span", { class: "key" + (r.dash ? " dashed" : ""), style: "border-color:" + (r.color || "transparent") + ";--k:" + (r.color || "transparent") }); // dash: same look as the line on the chart
+      const key = el("span", { class: "key" + (r.dash ? " dashed" : "") + (r.dot ? " dotted" : ""), style: "border-color:" + (r.color || "transparent") + ";--k:" + (r.color || "transparent") }); // dash: same look as the line on the chart
       tip.append(el("div", { class: "r" }, key, el("b", { text: r.text ? r.text(i) : v == null ? (r.none || "none") : (r.fmt || full)(v) }), el("span", { class: "n", text: r.name })));
     }
     tip.style.display = "block";
@@ -654,8 +656,10 @@ function renderItem() {
   };
   const legend = el("div", { class: "legend" },
     lg("ask", el("span", { class: "key", style: "border-color:" + cAsk }), "Ask"),
+    ...(cost ? [lg("rev_ask", el("span", { class: "key dotted", style: "--k:" + cAsk }), "Ask revenue")] : []),
     lg("bid", el("span", { class: "key", style: "border-color:" + cBid }), "Bid"),
-    lg("avg", el("span", { class: "dotkey", style: "background:" + c2 }), "Avg price"),
+    ...(cost ? [lg("rev_bid", el("span", { class: "key dotted", style: "--k:" + cBid }), "Bid revenue")] : []),
+    lg("avg", el("span", { class: "dotkey", style: "background:" + c2 }), "Avg trade"),
     ...(cost ? cost.legend.map((e) => lg(e.id, e.swatch, e.label)) : []),
     el("span", {}, el("span", { class: "hatch" }), "No data"));
   body.replaceChildren(el("div", { class: "card" }, el("div", { class: "charthead" }, el("h3", { text: it.name })), el("div", { style: "margin:0 0 8px" }, legend), host));
@@ -665,7 +669,11 @@ function renderItem() {
   }
   const pctFmt = (v) => v.toFixed(v < 10 ? 2 : 1) + "%";
   const showAsk = !off("ask"), showBid = !off("bid");
+  const afterTax = (arr) => arr.map((v) => (v == null ? null : v * (1 - MARKET_TAX))); // what a sale at that price brings in
+  const revAsk = afterTax(ask), revBid = afterTax(bid), dotted = "1.5 5";
   const lines = [...(cost ? cost.lines.filter((l) => !off(l.id)) : [])];
+  if (cost && !off("rev_ask")) lines.push({ id: "rev_ask", vals: revAsk, color: cAsk, dash: dotted });
+  if (cost && !off("rev_bid")) lines.push({ id: "rev_bid", vals: revBid, color: cBid, dash: dotted });
   if (showAsk && !showBid) lines.push({ vals: ask, color: cAsk }); // the band needs both edges; one visible edge is a plain line
   if (!showAsk && showBid) lines.push({ vals: bid, color: cBid });
   timeChart(host, {
@@ -676,6 +684,7 @@ function renderItem() {
       { id: "avg", name: "Average trade price", color: c2, vals: avg, none: "no trades" },
       { id: "bid", name: "Bid", color: cBid, vals: bid, none: "no order" },
       ...(cost ? cost.tip : []),
+      ...(cost ? [{ id: "rev_ask", name: "Ask revenue", color: cAsk, dot: true, vals: revAsk, none: "no order" }, { id: "rev_bid", name: "Bid revenue", color: cBid, dot: true, vals: revBid, none: "no order" }] : []),
       { name: "Units traded (value)", color: null, vals: vol, text: (i) => (vol[i] == null ? "no trades" : full(vol[i]) + (value[i] == null ? "" : " (" + fmt(value[i]) + ")")) },
       { name: "Spread", color: null, vals: spread, fmt: pctFmt, none: "—" },
     ].filter((r) => !r.id || !off(r.id)),
