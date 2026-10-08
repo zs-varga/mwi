@@ -94,6 +94,11 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
 .legend .lg[aria-pressed="false"] { opacity: .4; text-decoration: line-through; }
 .legend .lg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .dotkey { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: middle; margin: 0 7px 0 2px; }
+#skilltable th:first-child { width: auto; padding-right: 10px; }
+#skilltable th, #skilltable td { text-align: left; }
+#skilltable input { width: 110px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+#craft th:first-child { width: auto; padding-right: 10px; }
+#craft th:nth-child(2) { text-align: right; }
 .chart { position: relative; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border);
@@ -123,7 +128,6 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
   #i-filters label { flex: 0 0 auto; min-width: 0; width: 64px; }
   #i-filters label.grow { flex: 1 1 110px; width: auto; }
   #i-filters #i-level-l { width: 58px; }
-  #i-filters #i-speed-l { width: 70px; }
   #i-filters #i-hour-l { width: 100px; }
   #i-filters select, #i-filters input { min-width: 0; width: 100%; padding: 6px; font-size: 13px; }
   #i-filters .btn { white-space: nowrap; flex: none; padding: 6px 8px; }
@@ -152,7 +156,9 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" id="tab-movers" aria-selected="true">Movers</button>
     <button class="tab" role="tab" id="tab-item" aria-selected="false">Item</button>
+    <button class="tab" role="tab" id="tab-craft" aria-selected="false">Crafting</button>
     <button class="tab" role="tab" id="tab-watch" aria-selected="false">Watchlist</button>
+    <button class="tab" role="tab" id="tab-settings" aria-selected="false">Settings</button>
   </div>
 
   <div class="filters" id="filters">
@@ -186,10 +192,6 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
       <label class="grow">Item <input id="i-search" list="itemlist" placeholder="type an item name" autocomplete="off"></label>
       <datalist id="itemlist"></datalist>
       <label id="i-level-l">Level <select id="i-level"></select></label>
-      <label id="i-artisan-l" class="hidden" title="Artisan buff: every crafting ingredient except the upgrade item needs count / (1 + this %) per craft, rounded up. Applies to all crafts. Not saved.">Artisan % <input id="i-artisan" type="number" min="0" step="0.01" value="11.22"></label>
-      <label id="i-gourmet-l" class="hidden" title="Gourmet buff, cooking and brewing only: chance that a craft makes one extra item for free. Lowers the ingredients and crafting time per unit. Not saved.">Gourmet % <input id="i-gourmet" type="number" min="0" step="0.01" value="13.46"></label>
-      <label id="i-speed-l" class="hidden" title="Action speed: the base time of a craft is divided by this %. Applies to all crafts. Not saved.">Speed % <input id="i-speed" type="number" min="1" step="0.01" value="133.75"></label>
-      <label id="i-eff-l" class="hidden" title="Efficiency: each action does 1 + this % crafts on average (126% = always 2, 26% chance of a 3rd). The extra crafts are not free, so it only saves time. Applies to all crafts. Not saved.">Effic. % <input id="i-eff" type="number" min="0" step="0.01" value="126"></label>
       <label id="i-hour-l" class="hidden" title="Crafting time (real hours, with your speed and efficiency) is added to the cost lines at this price, in millions of coins per hour. Not saved.">Hour value (M) <input id="i-hour" type="number" min="0" step="0.05" value="0"></label>
       <button class="btn" id="i-star" aria-pressed="false">☆ Watch</button>
     </div>
@@ -197,8 +199,33 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
     <div id="item-body"><div class="empty">Pick an item above, or click one in Movers.</div></div>
   </section>
 
+  <section id="p-craft" class="hidden">
+    <div class="filters" id="c-filters">
+      <label title="Crafting time (real hours) is added to the cost at this price, in millions of coins per hour. Shared with the Item tab. Not saved.">Hour value (M) <input id="c-hour" type="number" min="0" step="0.05" value="0"></label>
+      <div><div style="font-size:12px;color:var(--ink-2);margin-bottom:3px">Craft</div>
+        <div class="seg" role="group" aria-label="Craft" id="c-mode">
+          <button data-m="1" aria-pressed="true" title="Buy the direct ingredients, craft the last step">1 step</button>
+          <button data-m="f" aria-pressed="false" title="Craft every step from base materials">Full</button>
+        </div></div>
+      <label title="Only items that traded at least this many units in the last hour">Min units/h <input id="c-minvol" type="number" min="0" step="1" value="5"></label>
+      <label>Search <input id="c-search" type="search" placeholder="item name"></label>
+      <div><div style="font-size:12px;color:var(--ink-2);margin-bottom:3px">Show</div>
+        <div class="seg" role="group" aria-label="Show" id="c-only">
+          <button data-o="1" aria-pressed="true">Profitable</button>
+          <button data-o="0" aria-pressed="false">All</button>
+        </div></div>
+    </div>
+    <p class="summary" id="c-summary"></p>
+    <div class="card"><div class="tablewrap"><table id="craft"><thead></thead><tbody></tbody></table></div></div>
+  </section>
+
   <section id="p-watch" class="hidden">
     <div id="watch-body"></div>
+  </section>
+
+  <section id="p-settings" class="hidden">
+    <p class="summary">Buffs per crafting skill. Each craft uses the values of its own skill, on the Item and Crafting tabs. Gourmet only exists for cooking and brewing. Not saved.</p>
+    <div class="card"><div class="tablewrap"><table id="skilltable"><thead></thead><tbody></tbody></table></div></div>
   </section>
 </main>
 </div>
@@ -230,6 +257,7 @@ const fmt = (n) => {
   if (a >= 1e5) return (n / 1e3).toFixed(0) + "K";
   return Math.round(n).toLocaleString("en-US");
 };
+const fmtDur = (t) => (t < 90 ? Math.round(t) + " s" : t < 5400 ? Math.round(t / 60) + " min" : (t / 3600).toFixed(1) + " h"); // seconds as s, min or h
 const full = (n) => (n == null ? "—" : Math.round(n).toLocaleString("en-US"));
 const pct = (a, b) => (a == null || b == null || b === 0 ? null : ((a - b) / b) * 100);
 const dtf = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -342,7 +370,8 @@ const UI = {
   tab: "movers", windowId: store.get("mw.window", "24h"), level: 0, minvol: store.get("mw.minvol", 100),
   search: "", dir: "all", sort: { key: "abs", dir: -1 }, limit: 250,
   item: null, itemLevel: 0, hour: 0, // hour: coins per real crafting hour (the box is in millions)
-  artisan: 11.22, gourmet: 13.46, speed: 133.75, eff: 126, rangeLo: null, rangeHi: null, hidden: new Set(), // hidden: chart series switched off by clicking their legend entry (ask, bid, avg, c1, c2); not saved
+  skills: {}, // buffs per crafting skill, edited on the Settings tab (see buffs())
+  rangeLo: null, rangeHi: null, craft: { mode: "1", minvol: 5, only: true, search: "", sort: { key: "perHour", dir: -1 } }, hidden: new Set(), // hidden: chart series switched off by clicking their legend entry (ask, bid, avg, c1, c2); not saved
   // range strip; null = default (last 7 days)
   watch: new Set(store.get("mw.watch", [])),
 };
@@ -627,9 +656,9 @@ function renderItem() {
   const sel = $("i-level"); sel.replaceChildren(...lvls.map((l) => el("option", { value: l, text: "+" + l, ...(l === lvl ? { selected: "" } : {}) })));
   const star = $("i-star"); star.setAttribute("aria-pressed", String(UI.watch.has(key))); star.textContent = UI.watch.has(key) ? "★ Watching" : "☆ Watch";
 
+  syncSettings();
   const hasCost = lvl === 0 && hasRecipes() && costSeries(it.hrid);
-  $("i-hour-l").classList.toggle("hidden", !hasCost); $("i-artisan-l").classList.toggle("hidden", !hasCost); $("i-speed-l").classList.toggle("hidden", !hasCost); $("i-eff-l").classList.toggle("hidden", !hasCost);
-  $("i-gourmet-l").classList.toggle("hidden", !(hasCost && hasCost.gourmet)); // only when the recipe tree has a cooking or brewing step
+  $("i-hour-l").classList.toggle("hidden", !hasCost);
   const all = history(it.id, lvl);
   renderBrush(all, key);
   const { lo: rLo, hi: rHi } = rangeNow();
@@ -772,6 +801,121 @@ function updateBrush() {
   e.meta.textContent = when(lo) + " – " + when(hi) + "  ·  " + (span < 48 * 3600 ? Math.round(span / 3600) + " h" : (span / 86400).toFixed(1) + " d");
 }
 
+// ------------------------------------------------------------------ settings tab: buffs per crafting skill
+const SKILLS = ["cheesesmithing", "crafting", "tailoring", "cooking", "brewing"];
+const BUFF_DEFAULTS = { artisan: 11.22, speed: 133.75, eff: 126, gourmet: 13.46 };
+const BUFF_COLS = [ // key, column title, tooltip, value cleaner
+  ["artisan", "Artisan %", "Every ingredient except the upgrade item needs count / (1 + this %) per craft, rounded up", (v) => (v >= 0 ? v : 0)],
+  ["speed", "Speed %", "The base time of a craft is divided by this %", (v) => (v > 0 ? v : 100)],
+  ["eff", "Effic. %", "Each action does 1 + this % crafts on average (126% = always 2, 26% chance of a 3rd); the extra crafts are not free, so only time is saved", (v) => (v >= 0 ? v : 0)],
+  ["gourmet", "Gourmet %", "Chance that a craft makes one extra item for free (cooking and brewing only)", (v) => (v >= 0 ? v : 0)],
+];
+for (const k of SKILLS) UI.skills[k] = { ...BUFF_DEFAULTS };
+const buffs = (skill) => UI.skills[skill] || BUFF_DEFAULTS; // a skill that is not listed above uses the defaults
+function buildSettings() {
+  const th = el("tr", {}, el("th", { scope: "col", text: "Skill" }), ...BUFF_COLS.map(([, title, tip]) => el("th", { scope: "col", title: tip, text: title })));
+  $("skilltable").tHead.replaceChildren(th);
+  const tb = $("skilltable").tBodies[0]; tb.replaceChildren();
+  for (const skill of SKILLS) {
+    const tr = el("tr", {}, el("td", { class: "name", text: skill.charAt(0).toUpperCase() + skill.slice(1) }));
+    for (const [key, , , clean] of BUFF_COLS) {
+      if (key === "gourmet" && !GOURMET_SKILLS.has(skill)) { tr.append(el("td", { class: "flat", text: "—" })); continue; }
+      const inp = el("input", { type: "number", min: "0", step: "0.01", id: "s-" + key + "-" + skill, "aria-label": skill + " " + key });
+      inp.addEventListener("input", (e) => { UI.skills[skill][key] = clean(parseFloat(e.target.value)); });
+      tr.append(el("td", {}, inp));
+    }
+    tb.append(tr);
+  }
+  syncSkillBoxes();
+}
+function syncSkillBoxes() {
+  for (const skill of SKILLS) for (const [key] of BUFF_COLS) { const e = $("s-" + key + "-" + skill); if (e && document.activeElement !== e) e.value = String(UI.skills[skill][key]); }
+}
+
+// ------------------------------------------------------------------ crafting tab
+/* Every craftable item at the latest snapshot, priced instant in, instant out: ingredients bought at the ask, the item sold at the bid
+   minus MARKET_TAX.  Uses the same recipes, buffs and time as the item chart, so the numbers agree with its cost and revenue lines.
+     Cost    = materials (cut at depth 1 for "1 step", or at the deepest depth for "Full") + crafting time x hour value
+     Profit  = revenue - cost
+     Per hour = (revenue - materials) / crafting hours  (before the hour value: the hour value at which profit would be zero)
+   Items with no bid, or an ingredient with no ask, are left out.  Computed on the fly, nothing is stored: it depends on the settings. */
+const SETTINGS = [ // only the hour value is shared like this now; the buffs are per skill (Settings tab): [state key, item-tab input, crafting-tab input, scale (box value x scale = state), cleaner]
+  ["hour", "i-hour", "c-hour", 1e6, (v) => (v >= 0 ? v : 0)],
+];
+function syncSettings() { // both tabs show the same settings; never overwrite a box that is being typed in
+  for (const [k, a, b, scale] of SETTINGS) for (const id of [a, b]) { const e = $(id); if (document.activeElement !== e) e.value = String(+(UI[k] / scale).toFixed(4)); }
+}
+function craftData() {
+  if (!hasRecipes() || !recipes.size) return null;
+  const st = stateAt(D.latest.id), idOf = new Map([...D.items.values()].map((i) => [i.hrid, i.id])), one = UI.craft.mode === "1", per = UI.hour / 3600;
+  const ask = (h) => { if (h === COIN) return 1; const id = idOf.get(h), v = id == null ? null : st.get(id + "|0"); return v ? v.ask : null; };
+  const list = [];
+  for (const hrid of recipes.keys()) {
+    const id = idOf.get(hrid), me = id == null ? null : st.get(id + "|0");
+    if (!me || me.bid == null) continue;
+    const rows = depthRows(hrid).rows;
+    if (!rows.length) continue;
+    const cutD = one ? 1 : Math.max(...rows.map((r) => r[0]));
+    let mat = 0, ok = true, secs = unitSecs(hrid);
+    for (const [d, ing, q] of rows) {
+      if (d === cutD || (d < cutD && !craftSet.has(ing))) { const p = ask(ing); if (p == null) { ok = false; break; } mat += q * p; } // bought
+      else if (d < cutD) secs += q * unitSecs(ing); // crafted above the cut
+    }
+    if (!ok) continue;
+    const rev = me.bid * (1 - MARKET_TAX), cost = mat + secs * per, hrs = secs / 3600;
+    list.push({ id, name: D.items.get(id).name, rev, cost, profit: rev - cost, margin: cost > 0 ? ((rev - cost) / cost) * 100 : null,
+      perHour: hrs > 0 ? (rev - mat) / hrs : null, secs: hrs > 0 ? secs : null, units: me.volume });
+  }
+  return list;
+}
+const CRAFT_COLS = [
+  { k: "name", label: "Item", tip: "" }, { k: "rev", label: "Revenue", tip: "Bid minus the 4% tax" }, { k: "cost", label: "Cost", tip: "Materials at ask, plus crafting time at the hour value" },
+  { k: "profit", label: "Profit", tip: "Revenue minus cost, per item" }, { k: "margin", label: "Margin", tip: "Profit as a percentage of the cost" },
+  { k: "perHour", label: "Per hour", tip: "(Revenue minus materials) per crafting hour, before the hour value" }, { k: "secs", label: "Time", tip: "Crafting time per item, real time with speed and efficiency" },
+  { k: "units", label: "Units/h", tip: "Units traded in the last hour" },
+];
+function renderCraft() {
+  syncSettings();
+  const all = craftData(), c = UI.craft;
+  if (!all) { $("c-summary").textContent = "This database has no recipe tables yet."; $("craft").tHead.replaceChildren(); $("craft").tBodies[0].replaceChildren(); return; }
+  const q = c.search.trim().toLowerCase();
+  const list = all.filter((r) => (r.units || 0) >= c.minvol && (!c.only || r.profit > 0) && (!q || r.name.toLowerCase().includes(q)));
+  const s = c.sort;
+  list.sort((a, b) => {
+    const x = a[s.key], y = b[s.key];
+    if (x == null && y == null) return 0;
+    if (x == null) return 1; if (y == null) return -1; // missing values always last
+    return (typeof x === "string" ? x.localeCompare(y) : x - y) * s.dir;
+  });
+  $("c-summary").textContent = `${all.length} craftable items priced · ${all.filter((r) => r.profit > 0).length} profitable · ${list.length} shown · prices from ${when(D.latest.ts)} · instant buy at ask, instant sell at bid minus ${Math.round(MARKET_TAX * 100)}%`;
+  for (const b of $("c-mode").children) b.setAttribute("aria-pressed", String(b.dataset.m === c.mode));
+  for (const b of $("c-only").children) b.setAttribute("aria-pressed", String((b.dataset.o === "1") === c.only));
+  const thead = $("craft").tHead; thead.replaceChildren();
+  const tr = el("tr");
+  for (const col of CRAFT_COLS) {
+    const th = el("th", { scope: "col", title: col.tip });
+    if (s.key === col.k) th.setAttribute("aria-sort", s.dir > 0 ? "ascending" : "descending");
+    const b = el("button", { text: col.label + (s.key === col.k ? (s.dir > 0 ? " ↑" : " ↓") : "") });
+    b.addEventListener("click", () => { UI.craft.sort = s.key === col.k ? { key: col.k, dir: -s.dir } : { key: col.k, dir: col.k === "name" ? 1 : -1 }; renderCraft(); });
+    th.append(b); tr.append(th);
+  }
+  thead.append(tr);
+  const tb = $("craft").tBodies[0]; tb.replaceChildren();
+  const sign = (v) => (v > 0 ? "up" : v < 0 ? "down" : "");
+  for (const r of list) {
+    const nm = el("button", { text: r.name }); nm.addEventListener("click", () => openItem(r.id, 0));
+    tb.append(el("tr", {}, el("td", { class: "name" }, nm), el("td", { text: fmt(r.rev) }), el("td", { text: fmt(r.cost) }),
+      el("td", { class: sign(r.profit), text: fmt(r.profit) }), el("td", { class: sign(r.margin), text: r.margin == null ? "—" : r.margin.toFixed(r.margin < 10 ? 1 : 0) + "%" }),
+      el("td", { class: sign(r.perHour), text: r.perHour == null ? "—" : fmt(r.perHour) }), el("td", { text: r.secs == null ? "—" : fmtDur(r.secs) }), el("td", { text: full(r.units) })));
+  }
+  if (!list.length) tb.append(el("tr", {}, el("td", { colspan: "8", class: "empty", text: "No items match these filters." })));
+}
+for (const [k, , cid, scale, clean] of SETTINGS) $(cid).addEventListener("input", (e) => { UI[k] = clean(parseFloat(e.target.value)) * scale; costCache.clear(); renderCraft(); });
+for (const b of $("c-mode").children) b.addEventListener("click", () => { UI.craft.mode = b.dataset.m; renderCraft(); });
+for (const b of $("c-only").children) b.addEventListener("click", () => { UI.craft.only = b.dataset.o === "1"; renderCraft(); });
+$("c-minvol").addEventListener("input", (e) => { UI.craft.minvol = Math.max(0, +e.target.value || 0); renderCraft(); });
+$("c-search").addEventListener("input", (e) => { UI.craft.search = e.target.value; renderCraft(); });
+
 // ------------------------------------------------------------------ craft cost
 /* What it costs to buy the ingredients of an item, at every snapshot, from the recipes in item_recipe
    via depthRows() (depth 1 = direct inputs, 2 = the inputs of those, ...; quantities per unit, summed within a depth, artisan and gourmet applied;
@@ -799,9 +943,9 @@ function hasRecipes() {
 
 const GOURMET_SKILLS = new Set(["cooking", "brewing"]);
 // Expected units one craft makes: the recipe's output, plus the gourmet chance of one free extra item for cooking and brewing.
-const expectedOut = (r) => r.out + (GOURMET_SKILLS.has(r.skill) ? UI.gourmet / 100 : 0);
+const expectedOut = (r) => r.out + (GOURMET_SKILLS.has(r.skill) ? buffs(r.skill).gourmet / 100 : 0);
 
-/* The ingredients of one unit of an item at every depth of its recipe tree, with the artisan and gourmet buffs applied at each step:
+/* The ingredients of one unit of an item at every depth of its recipe tree, with the artisan and gourmet buffs of each step's skill applied:
    - artisan: every ingredient except the upgrade item needs ceil(count / (1 + artisan%)) per craft (coin and shards included).
      Rounding is per craft, so it cannot be done on summed totals.
    - gourmet (cooking and brewing only): a craft makes out + gourmet% items on average, so per unit everything is divided by that
@@ -810,7 +954,7 @@ const expectedOut = (r) => r.out + (GOURMET_SKILLS.has(r.skill) ? UI.gourmet / 1
    Depth 1 = the direct inputs; quantities of the same ingredient are summed within a depth.
    A base item (no recipe) appears only at the depth where it is reached. */
 function depthRows(hrid) {
-  const f = 1 + UI.artisan / 100, out = [];
+  const out = [];
   let cur = new Map([[hrid, 1]]), gourmet = false;
   for (let d = 1; d <= 40 && cur.size; d++) {
     const nxt = new Map();
@@ -818,7 +962,7 @@ function depthRows(hrid) {
       const r = recipes.get(item);
       if (!r) continue;
       if (GOURMET_SKILLS.has(r.skill)) gourmet = true;
-      const e = expectedOut(r);
+      const e = expectedOut(r), f = 1 + buffs(r.skill).artisan / 100; // artisan of this step's own skill
       for (const x of r.rows) {
         const n = x.up ? x.count : Math.ceil(x.count / f - 1e-9); // -1e-9: float noise must not round an exact result up
         nxt.set(x.ing, (nxt.get(x.ing) || 0) + (q * n) / e);
@@ -829,18 +973,18 @@ function depthRows(hrid) {
   }
   return { rows: out, gourmet };
 }
-/* Crafting seconds per unit of an item.  craftSecs holds base time / output count, so base time per craft = that x out.
+/* Crafting seconds per unit of an item (speed, efficiency and gourmet of the recipe's skill).  craftSecs holds base time / output count, so base time per craft = that x out.
    - speed: the action time is divided by speed% / 100 (133.75% -> 30 s becomes 22.4 s).
    - efficiency: each action does 1 + efficiency% crafts on average (126% -> always 2, 26% chance of a 3rd); the extra crafts are not free
      (they use ingredients as usual), so efficiency only shortens the time.
    - gourmet: a craft makes more than `out` units on average, so each unit takes less (cooking and brewing only). */
 const unitSecs = (item) => {
   const r = recipes.get(item);
-  return r ? ((craftSecs.get(item) || 0) * r.out) / expectedOut(r) / (UI.speed / 100) / (1 + UI.eff / 100) : 0;
+  return r ? ((craftSecs.get(item) || 0) * r.out) / expectedOut(r) / (buffs(r.skill).speed / 100) / (1 + buffs(r.skill).eff / 100) : 0;
 };
 
 function costSeries(hrid) { // arrays aligned with D.snaps; null = recipe unknown or an ingredient is not on the market
-  const ckey = hrid + "|" + UI.artisan + "|" + UI.gourmet + "|" + UI.speed + "|" + UI.eff;
+  const ckey = hrid + "|" + JSON.stringify(UI.skills); // the cache key holds every skill's buffs
   if (costCache.has(ckey)) return costCache.get(ckey);
   const dr = recipes.has(hrid) ? depthRows(hrid) : { rows: [], gourmet: false }, rs = dr.rows;
   if (!rs.length) { costCache.set(ckey, null); return null; }
@@ -868,7 +1012,6 @@ function costSeries(hrid) { // arrays aligned with D.snaps; null = recipe unknow
   // crafting time: this item once, plus every craftable ingredient above the cut (qty per unit x its seconds per unit).  Gathering is not counted.
   const own = unitSecs(hrid);
   out.secs = craftSecs.size ? { parts: own, raw: own + rs.reduce((n, r) => n + r[2] * unitSecs(r[1]), 0) } : null;
-  out.gourmet = dr.gourmet;
   costCache.set(ckey, out);
   return out;
 }
@@ -883,7 +1026,7 @@ function costParts(it, all, pts) {
   const A = cs.ask, dash = "7 5", per = UI.hour / 3600; // only ask-priced costs: producing is acquiring, so it is compared with buying now
   const withTime = (arr, secs) => cut(arr).map((v) => (v == null ? null : v + (secs || 0) * per)); // time cost is the same at every snapshot
   const sp = cs.secs ? cs.secs.parts : 0, sr = cs.secs ? cs.secs.raw : 0;
-  const dur = (t) => (t < 90 ? Math.round(t) + " s" : t < 5400 ? Math.round(t / 60) + " min" : (t / 3600).toFixed(1) + " h"); // crafting time, real time with speed and efficiency
+  const dur = fmtDur; // crafting time, real time with speed and efficiency
   const row = (id, name, color, arr, secs) => ({ id, name, color, dash: true, vals: arr, text: (i) => (arr[i] == null ? "not priced" : full(arr[i]) + (cs.secs ? " (" + dur(secs) + ")" : "")) });
   return {
     lines: [
@@ -950,18 +1093,19 @@ function renderWatch() {
 // ------------------------------------------------------------------ tabs, filters, loading
 function setTab(tab) {
   UI.tab = tab;
-  for (const t of ["movers", "item", "watch"]) {
+  for (const t of ["movers", "item", "craft", "watch", "settings"]) {
     $("tab-" + t).setAttribute("aria-selected", String(t === tab));
     $("p-" + t).classList.toggle("hidden", t !== tab);
   }
   $("f-minvol-l").classList.toggle("hidden", tab !== "movers"); $("f-search-l").classList.toggle("hidden", tab !== "movers");
   $("f-dir-l").classList.toggle("hidden", tab !== "movers"); $("f-window").parentElement.classList.toggle("hidden", tab === "item"); $("f-level").parentElement.classList.toggle("hidden", tab !== "movers");
+  $("filters").classList.toggle("hidden", tab === "item" || tab === "craft" || tab === "settings");
   $("windownote").replaceChildren();
   render();
 }
 function render() {
   if (!db) return;
-  if (UI.tab === "movers") renderMovers(); else if (UI.tab === "item") { renderItem(); $("windownote").replaceChildren(); } else renderWatch();
+  if (UI.tab === "movers") renderMovers(); else if (UI.tab === "item") { renderItem(); $("windownote").replaceChildren(); } else if (UI.tab === "craft") renderCraft(); else if (UI.tab === "settings") syncSkillBoxes(); else renderWatch();
 }
 
 function afterLoad() {
@@ -999,7 +1143,8 @@ dz.addEventListener("drop", async (e) => { e.preventDefault(); dz.classList.remo
 document.addEventListener("dragover", (e) => e.preventDefault());
 document.addEventListener("drop", async (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) loadBytes(await f.arrayBuffer(), f.name); });
 
-for (const t of ["movers", "item", "watch"]) $("tab-" + t).addEventListener("click", () => setTab(t));
+for (const t of ["movers", "item", "craft", "watch", "settings"]) $("tab-" + t).addEventListener("click", () => setTab(t));
+buildSettings(); // after everything above is defined
 $("f-window").addEventListener("change", (e) => { UI.windowId = e.target.value; store.set("mw.window", UI.windowId); render(); });
 $("f-level").addEventListener("change", (e) => { UI.level = +e.target.value; UI.limit = 250; render(); });
 $("f-minvol").addEventListener("input", (e) => { UI.minvol = Math.max(0, +e.target.value || 0); store.set("mw.minvol", UI.minvol); UI.limit = 250; render(); });
@@ -1013,10 +1158,6 @@ $("i-search").addEventListener("change", (e) => { const it = D.byName.get(e.targ
 $("i-level").addEventListener("change", (e) => { UI.itemLevel = +e.target.value; renderItem(); });
 $("i-star").addEventListener("click", () => { if (UI.item == null) return; toggleWatch(UI.item + "|" + UI.itemLevel); renderItem(); });
 $("i-hour").addEventListener("input", (e) => { const v = parseFloat(e.target.value); UI.hour = v >= 0 ? v * 1e6 : 0; renderItem(); });
-$("i-artisan").addEventListener("input", (e) => { const v = parseFloat(e.target.value); UI.artisan = v >= 0 ? v : 0; costCache.clear(); renderItem(); });
-$("i-speed").addEventListener("input", (e) => { const v = parseFloat(e.target.value); UI.speed = v > 0 ? v : 100; renderItem(); });
-$("i-eff").addEventListener("input", (e) => { const v = parseFloat(e.target.value); UI.eff = v >= 0 ? v : 0; renderItem(); });
-$("i-gourmet").addEventListener("input", (e) => { const v = parseFloat(e.target.value); UI.gourmet = v >= 0 ? v : 0; costCache.clear(); renderItem(); });
 let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (UI.tab === "item") renderItem(); }, 150); });
 
 // theme toggle: auto -> light -> dark
