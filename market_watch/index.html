@@ -97,7 +97,8 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
 #skilltable th:first-child { width: auto; padding-right: 10px; }
 #skilltable th, #skilltable td { text-align: left; }
 #skilltable input { width: 110px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
-#craft th:first-child { width: auto; padding-right: 10px; }
+#craft th:first-child, #trade th:first-child { width: auto; padding-right: 10px; }
+#trade th:nth-child(2) { text-align: right; }
 #craft th:nth-child(2) { text-align: right; }
 .chart { position: relative; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
@@ -117,6 +118,7 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
 .empty { padding: 36px 12px; text-align: center; color: var(--ink-2); }
 .drop { border: 2px dashed var(--axis); border-radius: 12px; padding: 36px 20px; text-align: center; color: var(--ink-2); }
 .drop.over { border-color: var(--accent); background: var(--wash); }
+.nocomp { color: var(--s3); font-weight: 600; }
 .hidden { display: none !important; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 @media (min-width: 641px) {
@@ -157,6 +159,7 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
     <button class="tab" role="tab" id="tab-movers" aria-selected="true">Movers</button>
     <button class="tab" role="tab" id="tab-item" aria-selected="false">Item</button>
     <button class="tab" role="tab" id="tab-craft" aria-selected="false">Crafting</button>
+    <button class="tab" role="tab" id="tab-trade" aria-selected="false">Trade</button>
     <button class="tab" role="tab" id="tab-watch" aria-selected="false">Watchlist</button>
     <button class="tab" role="tab" id="tab-settings" aria-selected="false">Settings</button>
   </div>
@@ -219,12 +222,18 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
     <div class="card"><div class="tablewrap"><table id="craft"><thead></thead><tbody></tbody></table></div></div>
   </section>
 
+  <section id="p-trade" class="hidden">
+    <div id="t-note"></div>
+    <p class="summary" id="t-summary"></p>
+    <div class="card"><div class="tablewrap"><table id="trade"><thead></thead><tbody></tbody></table></div></div>
+  </section>
+
   <section id="p-watch" class="hidden">
     <div id="watch-body"></div>
   </section>
 
   <section id="p-settings" class="hidden">
-    <p class="summary">Buffs per crafting skill. Each craft uses the values of its own skill, on the Item and Crafting tabs. Gourmet only exists for cooking and brewing. Not saved.</p>
+    <p class="summary">Settings per crafting skill. Each craft uses the values of its own skill, on the Item and Crafting tabs. Level adds 1% efficiency for each level above the recipe\'s level requirement (artisan raises every requirement by 5); Effic. % is the efficiency from gear and buffs without that bonus. Gourmet only exists for cooking and brewing. Saved in this browser.</p>
     <div class="card"><div class="tablewrap"><table id="skilltable"><thead></thead><tbody></tbody></table></div></div>
   </section>
 </main>
@@ -803,14 +812,30 @@ function updateBrush() {
 
 // ------------------------------------------------------------------ settings tab: buffs per crafting skill
 const SKILLS = ["cheesesmithing", "crafting", "tailoring", "cooking", "brewing"];
-const BUFF_DEFAULTS = { artisan: 11.22, speed: 133.75, eff: 126, gourmet: 13.46 };
+const BUFF_DEFAULTS = { level: 100, eff: 0, speed: 100, artisan: 0, gourmet: 0 }; // for a skill that is not listed below
+// Your values (2026-10-08).  Effic. % is from gear and buffs without the level bonus: the calculator showed the totals on an item needing 80 + 5 (artisan),
+// so effic. = shown total - (level - 85), e.g. cheesesmithing 102.35 - (118 - 85) = 69.35.
+const SKILL_DEFAULTS = {
+  cheesesmithing: { level: 118, eff: 69.35, speed: 143.9, artisan: 11.22, gourmet: 0 },
+  crafting: { level: 126, eff: 82.67, speed: 143.9, artisan: 11.22, gourmet: 0 },
+  tailoring: { level: 114, eff: 57.53, speed: 143.9, artisan: 11.22, gourmet: 0 },
+  cooking: { level: 112, eff: 46.31, speed: 128.36, artisan: 11.22, gourmet: 13.46 },
+  brewing: { level: 116, eff: 46.31, speed: 136.52, artisan: 11.22, gourmet: 13.46 },
+};
+const ARTISAN_LEVEL_PENALTY = 5; // using artisan raises every recipe's level requirement by 5, which lowers the level bonus
 const BUFF_COLS = [ // key, column title, tooltip, value cleaner
-  ["artisan", "Artisan %", "Every ingredient except the upgrade item needs count / (1 + this %) per craft, rounded up", (v) => (v >= 0 ? v : 0)],
+  ["level", "Level", "Your level in this skill. Each level above a recipe's level requirement (+5 while artisan is used) adds 1% efficiency to that recipe, on top of the Effic. % below", (v) => (v >= 1 ? Math.floor(v) : 1)],
+  ["eff", "Effic. %", "Efficiency from gear, tea and other buffs, without the level bonus. Each action does 1 + (this % + level bonus) crafts on average (126% = always 2, 26% chance of a 3rd); the extra crafts are not free, so only time is saved", (v) => (v >= 0 ? v : 0)],
   ["speed", "Speed %", "The base time of a craft is divided by this %", (v) => (v > 0 ? v : 100)],
-  ["eff", "Effic. %", "Each action does 1 + this % crafts on average (126% = always 2, 26% chance of a 3rd); the extra crafts are not free, so only time is saved", (v) => (v >= 0 ? v : 0)],
+  ["artisan", "Artisan %", "Every ingredient except the upgrade item needs count / (1 + this %) per craft, rounded up", (v) => (v >= 0 ? v : 0)],
   ["gourmet", "Gourmet %", "Chance that a craft makes one extra item for free (cooking and brewing only)", (v) => (v >= 0 ? v : 0)],
 ];
-for (const k of SKILLS) UI.skills[k] = { ...BUFF_DEFAULTS };
+for (const k of SKILLS) UI.skills[k] = { ...BUFF_DEFAULTS, ...SKILL_DEFAULTS[k] };
+{ // saved settings (this browser only) override the defaults above, key by key
+  const saved = store.get("mw.skills", {});
+  for (const k of SKILLS) for (const key of Object.keys(UI.skills[k])) { const v = saved[k] && saved[k][key]; if (typeof v === "number" && isFinite(v)) UI.skills[k][key] = v; }
+}
+const saveSkills = () => store.set("mw.skills", UI.skills);
 const buffs = (skill) => UI.skills[skill] || BUFF_DEFAULTS; // a skill that is not listed above uses the defaults
 function buildSettings() {
   const th = el("tr", {}, el("th", { scope: "col", text: "Skill" }), ...BUFF_COLS.map(([, title, tip]) => el("th", { scope: "col", title: tip, text: title })));
@@ -820,8 +845,8 @@ function buildSettings() {
     const tr = el("tr", {}, el("td", { class: "name", text: skill.charAt(0).toUpperCase() + skill.slice(1) }));
     for (const [key, , , clean] of BUFF_COLS) {
       if (key === "gourmet" && !GOURMET_SKILLS.has(skill)) { tr.append(el("td", { class: "flat", text: "—" })); continue; }
-      const inp = el("input", { type: "number", min: "0", step: "0.01", id: "s-" + key + "-" + skill, "aria-label": skill + " " + key });
-      inp.addEventListener("input", (e) => { UI.skills[skill][key] = clean(parseFloat(e.target.value)); });
+      const inp = el("input", { type: "number", min: key === "level" ? "1" : "0", step: key === "level" ? "1" : "0.01", id: "s-" + key + "-" + skill, "aria-label": skill + " " + key });
+      inp.addEventListener("input", (e) => { UI.skills[skill][key] = clean(parseFloat(e.target.value)); saveSkills(); });
       tr.append(el("td", {}, inp));
     }
     tb.append(tr);
@@ -916,6 +941,112 @@ for (const b of $("c-only").children) b.addEventListener("click", () => { UI.cra
 $("c-minvol").addEventListener("input", (e) => { UI.craft.minvol = Math.max(0, +e.target.value || 0); renderCraft(); });
 $("c-search").addEventListener("input", (e) => { UI.craft.search = e.target.value; renderCraft(); });
 
+// ------------------------------------------------------------------ trade
+/* A plain spread screen, no model.  Each item has a tradeable price range (about +-10% around a slowly moving center, or +-2 grid steps if that is wider,
+   bounds on the price grid); an order outside it sits inactive until the range moves, but marketplace.json still reports it as the best bid or ask.
+   The center is not published; it matched the best ask to within about 0.5% on most items checked (Advanced Food Crate, Philosophers Mirror exactly, Hatchet 1.6% off),
+   so the range here is estimated around the best ask (around the median trade price if the ask is far from recent trades).  Quotes outside the estimated range
+   (with 1.5% tolerance for the center error) are ignored.  Where no bid (or ask) is left in the range there is no queue on that side: Bid for becomes the range floor,
+   Ask for the range ceiling, which is the best margin you could set, not a guarantee.  Otherwise Bid for = best bid + one grid step, Ask for = best ask - one step.
+   Net margin = (96% of ask for - bid for) / bid for.  The 12 h margin does the same with the median best bid and ask of the last 12 snapshots, so a one-hour spread
+   that is already gone shows up as a much lower number.  Hours traded = share of the last 24 snapshots in which the item traded.  Shown: net margin at least 5% and traded in at least half of the hours. */
+const TAXKEEP = 1 - MARKET_TAX;
+/* The game only accepts prices on a grid.  The step above a price p is the smallest allowed step s with p < 300 * s, except that steps 1 and 2 run to
+   400 and 800.  Allowed steps: 1, 2, 4, 5, 6, 8, then 10, 12, 16, 20, 25, 30, 40, 50, 60, 80 and the same ten values times every power of ten.
+   A price on a boundary already takes the larger step (1196 -> 1200 -> 1205).  Found from the market data (99% of observed bids and asks sit on this grid)
+   and from steps checked in the game; steps for items other than Sugar are inferred, not confirmed. */
+function priceStep(p) {
+  if (p < 400) return 1;
+  if (p < 800) return 2;
+  for (const s of [4, 5, 6, 8]) if (p < 300 * s) return s;
+  for (let m = 1; ; m *= 10) for (const b of [10, 12, 16, 20, 25, 30, 40, 50, 60, 80]) if (p < 300 * b * m) return b * m;
+}
+const tickUp = (p) => p + priceStep(p);                  // next price above p
+const tickDown = (p) => p - priceStep(Math.max(1, p - 1)); // next price below p (1200 -> 1196, 1205 -> 1200)
+
+const MIN_MARGIN = 0.05, MIN_HOURS = 0.5; // fixed filters: net margin at least 5%, traded in at least half of the last 24 hours
+UI.trade = { sort: { key: "margin", dir: -1 } };
+const tPick = (a) => { const x = a.filter((v) => v != null).sort((p, q) => p - q); return x.length ? x[x.length >> 1] : null; }; // an observed price near the median
+
+const TOL = 0.015; // the center is only known to about this accuracy
+const gridNear = (p) => { const st = priceStep(p); return Math.round(p / st) * st; };
+const gridUp = (p) => { const st = priceStep(p); return Math.ceil(p / st) * st; };
+
+function tradeRows() {
+  const out = [];
+  for (const key of stateAt(D.latest.id).keys()) {
+    const [iid, lvl] = key.split("|").map(Number);
+    if (lvl !== 0) continue;
+    const pts = history(iid, 0), n = pts.length, W = Math.min(24, n);
+    if (W < 12) continue;
+    const w = pts.slice(n - W).map((p) => p.v), last = w[W - 1];
+    if (!last) continue;
+    let traded = 0;
+    for (const v of w) if (v && v.volume > 0 && v.price != null) traded++;
+    const rec = w.slice(-12), t = tPick(rec.map((v) => (v && v.volume > 0 ? v.price : null)));       // typical recent trade price
+    let ref = last.ask != null ? last.ask : t;                                                          // estimated center of the range
+    if (t != null && last.ask != null && (last.ask > 1.1 * t || last.ask < 0.9 * t)) ref = t;           // an ask far from recent trades is probably out of range itself
+    if (ref == null) continue;
+    const half = Math.max(0.1 * ref, 2 * priceStep(ref)), lo = gridNear(ref - half), hi = gridUp(ref + half);
+    const inR = (q) => q != null && q >= lo * (1 - TOL) && q <= hi * (1 + TOL);
+    const bidIn = inR(last.bid) ? last.bid : null, askIn = inR(last.ask) ? last.ask : null;
+    const B = bidIn != null ? Math.min(tickUp(bidIn), hi) : lo, A = askIn != null ? Math.max(tickDown(askIn), lo) : hi;
+    if (B >= A) continue;
+    out.push({ iid, name: D.items.get(iid).name, B, A, lo, hi, noBid: bidIn == null, noAsk: askIn == null, queue: bidIn == null || askIn == null,
+      margin: (TAXKEEP * A - B) / B, spread: A - B,
+      hours: traded / W });
+  }
+  return out;
+}
+
+const TRADE_COLS = [
+  { k: "name", label: "Item", tip: "" },
+  { k: "B", label: "Bid for", tip: "Price to post a buy order at: the best bid plus one grid step" },
+  { k: "A", label: "Ask for", tip: "Price to post a sell order at: the best ask minus one grid step" },
+  { k: "margin", label: "Net margin", tip: "(96% of the ask for - bid for) / bid for: profit of one round trip at today's quotes inside the range, after the 4% tax. With no competition on a side it uses the range edge, so it is the most you could set." },
+  { k: "lo", label: "Range", tip: "Estimated tradeable range (about +-10% around the best ask, bounds on the price grid). A green low bound means no bid inside the range, a green high bound no ask: nobody ahead of you in the queue on that side (Bid for / Ask for then sit at that bound, the best margin you could set)." },
+  { k: "spread", label: "Spread", tip: "Ask for minus bid for, in coins" },
+  { k: "hours", label: "Hours traded", tip: "Share of the last 24 hours in which the item traded at all" },
+];
+
+function renderTrade() {
+  const c = UI.trade, s = c.sort;
+  const all = tradeRows();
+  const list = all.filter((r) => r.margin >= MIN_MARGIN && r.hours >= MIN_HOURS);
+  list.sort((a, b) => {
+    const x = a[s.key], y = b[s.key];
+    if (x == null && y == null) return 0;
+    if (x == null) return 1; if (y == null) return -1;
+    return (typeof x === "string" ? x.localeCompare(y) : x - y) * s.dir;
+  });
+  const hrs = D.snaps.length;
+  $("t-note").replaceChildren(hrs < 24 ? el("p", { class: "note", text: `Only ${hrs} hours of history; hours traded and volume use what exists.` }) : "");
+  $("t-summary").textContent = `${all.length} items with a two-sided book · ${list.length} with a net margin of at least ${MIN_MARGIN * 100}% that traded in at least ${MIN_HOURS * 100}% of the last 24 hours${list.length > 300 ? " (first 300 shown)" : ""} · prices as of ${when(D.latest.ts)} · tax ${Math.round(MARKET_TAX * 100)}%`;
+  const thead = $("trade").tHead; thead.replaceChildren();
+  const tr = el("tr");
+  for (const col of TRADE_COLS) {
+    const th = el("th", { scope: "col", title: col.tip });
+    if (s.key === col.k) th.setAttribute("aria-sort", s.dir > 0 ? "ascending" : "descending");
+    const b = el("button", { text: col.label + (s.key === col.k ? (s.dir > 0 ? " ↑" : " ↓") : "") });
+    b.addEventListener("click", () => { c.sort = s.key === col.k ? { key: col.k, dir: -s.dir } : { key: col.k, dir: col.k === "name" ? 1 : -1 }; renderTrade(); });
+    th.append(b); tr.append(th);
+  }
+  thead.append(tr);
+  const tb = $("trade").tBodies[0]; tb.replaceChildren();
+  const sg = (v) => (v == null ? "flat" : v > 0 ? "up" : v < 0 ? "down" : "flat");
+  for (const r of list.slice(0, 300)) {
+    const nm = el("button", { text: r.name }); nm.addEventListener("click", () => openItem(r.iid, 0));
+    tb.append(el("tr", {},
+      el("td", { class: "name" }, nm), el("td", { text: full(r.B) }), el("td", { text: full(r.A) }),
+      el("td", { class: sg(r.margin), text: pctTxt(r.margin) }),
+      el("td", {}, el("span", { class: r.noBid ? "nocomp" : "", title: r.noBid ? "no bid inside the range" : "", text: fmt(r.lo) }), " – ",
+        el("span", { class: r.noAsk ? "nocomp" : "", title: r.noAsk ? "no ask inside the range" : "", text: fmt(r.hi) })),
+      el("td", { text: full(r.spread) }), el("td", { text: Math.round(r.hours * 100) + "%" })));
+  }
+  if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(TRADE_COLS.length), class: "empty", text: "Nothing has a net margin of at least 5% and trades in at least half of the hours." })));
+}
+const pctTxt = (x, d = 1) => (x == null ? "—" : (x * 100).toFixed(d) + "%");
+
 // ------------------------------------------------------------------ craft cost
 /* What it costs to buy the ingredients of an item, at every snapshot, from the recipes in item_recipe
    via depthRows() (depth 1 = direct inputs, 2 = the inputs of those, ...; quantities per unit, summed within a depth, artisan and gourmet applied;
@@ -929,9 +1060,10 @@ const COIN = "/items/coin";
 function hasRecipes() {
   if (hasDepth == null) {
     hasDepth = rows("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'item_recipe'").length > 0;
-    recipes = new Map(); // item -> { out: units per craft, skill, rows: [{ ing, count (per craft), up (upgrade item) }] }
-    if (hasDepth) for (const [item, ing, count, up, out, skill] of rows("SELECT item_hrid, ingredient_hrid, count, is_upgrade, output_count, skill FROM item_recipe")) {
-      if (!recipes.has(item)) recipes.set(item, { out, skill, rows: [] });
+    recipes = new Map(); // item -> { out: units per craft, skill, lvl: level the action needs (0 = unknown), rows: [{ ing, count (per craft), up (upgrade item) }] }
+    const hasLvl = hasDepth && rows("PRAGMA table_info(item_recipe)").some((c) => c[1] === "level_requirement"); // older databases have no level column: no level bonus then
+    if (hasDepth) for (const [item, ing, count, up, out, skill, lvl] of rows("SELECT item_hrid, ingredient_hrid, count, is_upgrade, output_count, skill, " + (hasLvl ? "level_requirement" : "0") + " FROM item_recipe")) {
+      if (!recipes.has(item)) recipes.set(item, { out, skill, lvl: lvl || 0, rows: [] });
       recipes.get(item).rows.push({ ing, count, up: up === 1 });
     }
     craftSet = new Set(recipes.keys());
@@ -976,11 +1108,13 @@ function depthRows(hrid) {
 /* Crafting seconds per unit of an item (speed, efficiency and gourmet of the recipe's skill).  craftSecs holds base time / output count, so base time per craft = that x out.
    - speed: the action time is divided by speed% / 100 (133.75% -> 30 s becomes 22.4 s).
    - efficiency: each action does 1 + efficiency% crafts on average (126% -> always 2, 26% chance of a 3rd); the extra crafts are not free
-     (they use ingredients as usual), so efficiency only shortens the time.
+     (they use ingredients as usual), so efficiency only shortens the time.  Efficiency = the Effic. % setting + 1% for each level of the skill above the
+     recipe's level requirement (see effOf).
    - gourmet: a craft makes more than `out` units on average, so each unit takes less (cooking and brewing only). */
+const effOf = (r) => { const b = buffs(r.skill); return b.eff + (r.lvl ? Math.max(0, b.level - r.lvl - (b.artisan > 0 ? ARTISAN_LEVEL_PENALTY : 0)) : 0); }; // % efficiency of a recipe: setting + 1% per level above its requirement (which artisan raises by 5)
 const unitSecs = (item) => {
   const r = recipes.get(item);
-  return r ? ((craftSecs.get(item) || 0) * r.out) / expectedOut(r) / (buffs(r.skill).speed / 100) / (1 + buffs(r.skill).eff / 100) : 0;
+  return r ? ((craftSecs.get(item) || 0) * r.out) / expectedOut(r) / (buffs(r.skill).speed / 100) / (1 + effOf(r) / 100) : 0;
 };
 
 function costSeries(hrid) { // arrays aligned with D.snaps; null = recipe unknown or an ingredient is not on the market
@@ -1093,19 +1227,19 @@ function renderWatch() {
 // ------------------------------------------------------------------ tabs, filters, loading
 function setTab(tab) {
   UI.tab = tab;
-  for (const t of ["movers", "item", "craft", "watch", "settings"]) {
+  for (const t of ["movers", "item", "craft", "trade", "watch", "settings"]) {
     $("tab-" + t).setAttribute("aria-selected", String(t === tab));
     $("p-" + t).classList.toggle("hidden", t !== tab);
   }
   $("f-minvol-l").classList.toggle("hidden", tab !== "movers"); $("f-search-l").classList.toggle("hidden", tab !== "movers");
   $("f-dir-l").classList.toggle("hidden", tab !== "movers"); $("f-window").parentElement.classList.toggle("hidden", tab === "item"); $("f-level").parentElement.classList.toggle("hidden", tab !== "movers");
-  $("filters").classList.toggle("hidden", tab === "item" || tab === "craft" || tab === "settings");
+  $("filters").classList.toggle("hidden", tab === "item" || tab === "craft" || tab === "trade" || tab === "settings");
   $("windownote").replaceChildren();
   render();
 }
 function render() {
   if (!db) return;
-  if (UI.tab === "movers") renderMovers(); else if (UI.tab === "item") { renderItem(); $("windownote").replaceChildren(); } else if (UI.tab === "craft") renderCraft(); else if (UI.tab === "settings") syncSkillBoxes(); else renderWatch();
+  if (UI.tab === "movers") renderMovers(); else if (UI.tab === "item") { renderItem(); $("windownote").replaceChildren(); } else if (UI.tab === "craft") renderCraft(); else if (UI.tab === "trade") renderTrade(); else if (UI.tab === "settings") syncSkillBoxes(); else renderWatch();
 }
 
 function afterLoad() {
@@ -1143,7 +1277,7 @@ dz.addEventListener("drop", async (e) => { e.preventDefault(); dz.classList.remo
 document.addEventListener("dragover", (e) => e.preventDefault());
 document.addEventListener("drop", async (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) loadBytes(await f.arrayBuffer(), f.name); });
 
-for (const t of ["movers", "item", "craft", "watch", "settings"]) $("tab-" + t).addEventListener("click", () => setTab(t));
+for (const t of ["movers", "item", "craft", "trade", "watch", "settings"]) $("tab-" + t).addEventListener("click", () => setTab(t));
 buildSettings(); // after everything above is defined
 $("f-window").addEventListener("change", (e) => { UI.windowId = e.target.value; store.set("mw.window", UI.windowId); render(); });
 $("f-level").addEventListener("change", (e) => { UI.level = +e.target.value; UI.limit = 250; render(); });
