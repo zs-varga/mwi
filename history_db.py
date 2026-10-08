@@ -6,7 +6,7 @@
 Schema
     item_ingredient_depth(item_hrid, depth, ingredient_hrid, qty)
                                         recipe tree per depth, reloaded every run from --depths (see load_depths)
-    item_recipe(item_hrid, ingredient_hrid, count, is_upgrade, output_count, skill)
+    item_recipe(item_hrid, ingredient_hrid, count, is_upgrade, output_count, skill, level_requirement)
                                         one row per recipe ingredient, reloaded every run from --recipes (see load_recipes)
     item_craft_time(item_hrid, secs)    crafting seconds per unit of each craftable item, reloaded every run from --craft-times
     item(item_id, hrid)                 one row per item, name stored once
@@ -169,6 +169,7 @@ CREATE TABLE item_recipe (
   is_upgrade INTEGER NOT NULL,
   output_count REAL NOT NULL,
   skill TEXT NOT NULL,
+  level_requirement INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (item_hrid, ingredient_hrid, is_upgrade)
 ) WITHOUT ROWID;
 """
@@ -178,17 +179,18 @@ def load_recipes(con, path):
     """(Re)load item_recipe from the CSV exported by the game-data project: one row per ingredient of each craftable
     item, exactly as the game defines the recipe.  count = consumed per craft, output_count = units one craft makes,
     is_upgrade = 1 for the upgrade item (the base item an upgrade recipe consumes; not reduced by the artisan buff),
-    skill = the crafting skill (the gourmet buff only applies to cooking and brewing).
+    skill = the crafting skill (the gourmet buff only applies to cooking and brewing),
+    level_requirement = the skill level the action needs (each level above it gives +1% efficiency; 0 if the CSV has no such column).
     The dashboard walks these rows to get the ingredients at every depth, applying artisan at each step."""
     if not os.path.exists(path):
         print(f"{path} not found - recipe table left as it is")
         return
     with gzip.open(path, "rt", encoding="utf-8", newline="") as f:
-        rows = [(r["item_hrid"], r["ingredient_hrid"], float(r["count"]), int(r["is_upgrade"]), float(r["output_count"]), r["skill"])
+        rows = [(r["item_hrid"], r["ingredient_hrid"], float(r["count"]), int(r["is_upgrade"]), float(r["output_count"]), r["skill"], int(r.get("level_requirement") or 0))
                 for r in csv.DictReader(f)]
     with con:
         con.executescript(RECIPE_SCHEMA)
-        con.executemany("INSERT INTO item_recipe VALUES (?,?,?,?,?,?)", rows)
+        con.executemany("INSERT INTO item_recipe VALUES (?,?,?,?,?,?,?)", rows)
     print(f"loaded {len(rows)} rows into item_recipe")
 
 
