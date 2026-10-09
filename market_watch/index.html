@@ -233,8 +233,9 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
   </section>
 
   <section id="p-settings" class="hidden">
-    <p class="summary">Settings per crafting skill. Each craft uses the values of its own skill, on the Item and Crafting tabs. Level adds 1% efficiency for each level above the recipe\'s level requirement (artisan raises every requirement by 5); Effic. % is the efficiency from gear and buffs without that bonus. Gourmet only exists for cooking and brewing. Saved in this browser.</p>
     <div class="card"><div class="tablewrap"><table id="skilltable"><thead></thead><tbody></tbody></table></div></div>
+    <p class="summary"><label>Drink duration (s) <input id="drink-secs" type="number" min="1" step="1" style="width:90px"></label></p>
+    <div class="card"><div class="tablewrap"><table id="drinktable"><thead></thead><tbody></tbody></table></div></div>
   </section>
 </main>
 </div>
@@ -322,7 +323,7 @@ async function openDb(bytes) {
   D.byName = new Map([...D.items.values()].map((i) => [i.name, i]));
   D.levels = rows("SELECT DISTINCT level FROM obs ORDER BY level").map((r) => r[0]);
   D.latest = D.snaps[D.snaps.length - 1];
-  stateCache.clear(); histCache.clear(); costCache.clear(); hasDepth = null; craftSet = null; craftSecs = null; recipes = null;
+  stateCache.clear(); histCache.clear(); costCache.clear(); hasDepth = null; craftSet = null; craftSecs = null; recipes = null; dropTab = null; lootTab = null; drinkTab = null;
 }
 
 const stateCache = new Map();
@@ -343,7 +344,7 @@ function stateAt(snapId) { // Map "item|level" -> {ask,bid,price,volume}; unlist
 }
 
 const histCache = new Map();
-let hasDepth = null, craftSet = null, craftSecs = null, recipes = null; const costCache = new Map(); // item_recipe (one level) and the cost series computed from it; the cache key includes the artisan value
+let hasDepth = null, craftSet = null, craftSecs = null, recipes = null, dropTab = null, lootTab = null, drinkTab = null; const costCache = new Map(); // item_recipe (one level) and the cost series computed from it; the cache key includes the artisan value
 function history(itemId, level) { // one point per snapshot, values carried forward; null = not listed
   const key = itemId + "|" + level;
   if (histCache.has(key)) return histCache.get(key);
@@ -832,22 +833,24 @@ function updateBrush() {
 
 // ------------------------------------------------------------------ settings tab: buffs per crafting skill
 const SKILLS = ["cheesesmithing", "crafting", "tailoring", "cooking", "brewing"];
-const BUFF_DEFAULTS = { level: 100, eff: 0, speed: 100, artisan: 0, gourmet: 0 }; // for a skill that is not listed below
+const BUFF_DEFAULTS = { level: 100, eff: 0, speed: 100, artisan: 0, gourmet: 0, essence: 0, rare: 0 }; // for a skill that is not listed below
 // Your values (2026-10-08).  Effic. % is from gear and buffs without the level bonus: the calculator showed the totals on an item needing 80 + 5 (artisan),
 // so effic. = shown total - (level - 85), e.g. cheesesmithing 102.35 - (118 - 85) = 69.35.
 const SKILL_DEFAULTS = {
-  cheesesmithing: { level: 118, eff: 69.35, speed: 143.9, artisan: 11.22, gourmet: 0 },
-  crafting: { level: 126, eff: 82.67, speed: 143.9, artisan: 11.22, gourmet: 0 },
-  tailoring: { level: 114, eff: 57.53, speed: 143.9, artisan: 11.22, gourmet: 0 },
-  cooking: { level: 112, eff: 46.31, speed: 128.36, artisan: 11.22, gourmet: 13.46 },
-  brewing: { level: 116, eff: 46.31, speed: 136.52, artisan: 11.22, gourmet: 13.46 },
+  cheesesmithing: { level: 118, eff: 69.35, speed: 143.9, artisan: 11.22, gourmet: 0, essence: 60.3, rare: 67.09 },
+  crafting: { level: 126, eff: 82.67, speed: 143.9, artisan: 11.22, gourmet: 0, essence: 60.3, rare: 84.82 },
+  tailoring: { level: 114, eff: 57.53, speed: 143.9, artisan: 11.22, gourmet: 0, essence: 60.3, rare: 67.09 },
+  cooking: { level: 112, eff: 46.31, speed: 128.36, artisan: 11.22, gourmet: 13.46, essence: 60.3, rare: 49.36 },
+  brewing: { level: 116, eff: 46.31, speed: 136.52, artisan: 11.22, gourmet: 13.46, essence: 60.3, rare: 66.16 },
 };
 const ARTISAN_LEVEL_PENALTY = 5; // using artisan raises every recipe's level requirement by 5, which lowers the level bonus
 const BUFF_COLS = [ // key, column title, tooltip, value cleaner
   ["level", "Level", "Your level in this skill. Each level above a recipe's level requirement (+5 while artisan is used) adds 1% efficiency to that recipe, on top of the Effic. % below", (v) => (v >= 1 ? Math.floor(v) : 1)],
   ["eff", "Effic. %", "Efficiency from gear, tea and other buffs, without the level bonus. Each action does 1 + (this % + level bonus) crafts on average (126% = always 2, 26% chance of a 3rd); the extra crafts are not free, so only time is saved", (v) => (v >= 0 ? v : 0)],
-  ["speed", "Speed %", "The base time of a craft is divided by this %", (v) => (v > 0 ? v : 100)],
-  ["artisan", "Artisan %", "Every ingredient except the upgrade item needs count / (1 + this %) per craft, rounded up", (v) => (v >= 0 ? v : 0)],
+  ["speed", "Speed %", "Speed bonus: the base time of an action is divided by 1 + this % (143.9 -> 30 s becomes 12.3 s)", (v) => (v > 0 ? v : 100)],
+  ["artisan", "Artisan %", "Every ingredient except the upgrade item needs count / (1 + this %) per craft on average (the game takes the rounded-up amount and gives the unused part back with that chance)", (v) => (v >= 0 ? v : 0)],
+  ["essence", "Essence find %", "Raises the chance of the essence drop of every craft: chance x (1 + this %)", (v) => (v >= 0 ? v : 0)],
+  ["rare", "Rare find %", "Raises the chance of the rare drops (crates and the like) of every craft: chance x (1 + this %)", (v) => (v >= 0 ? v : 0)],
   ["gourmet", "Gourmet %", "Chance that a craft makes one extra item for free (cooking and brewing only)", (v) => (v >= 0 ? v : 0)],
 ];
 for (const k of SKILLS) UI.skills[k] = { ...BUFF_DEFAULTS, ...SKILL_DEFAULTS[k] };
@@ -856,6 +859,21 @@ for (const k of SKILLS) UI.skills[k] = { ...BUFF_DEFAULTS, ...SKILL_DEFAULTS[k] 
   for (const k of SKILLS) for (const key of Object.keys(UI.skills[k])) { const v = saved[k] && saved[k][key]; if (typeof v === "number" && isFinite(v)) UI.skills[k][key] = v; }
 }
 const saveSkills = () => store.set("mw.skills", UI.skills);
+// The three drinks each skill runs.  Their effects are already in the buffs above; here they only cost money: each drink lasts 5 minutes and is bought at the ask.
+const DRINK_SECS = 267, DRINK_SLOTS = 3; // default duration of a drink in seconds (your current value; the game data says 300 before the effects that shorten it)
+UI.drinks = {}; UI.drinkSecs = DRINK_SECS; // one duration for all drinks: effects that shorten drink use are entered here as the resulting seconds
+const DRINK_DEFAULTS = { // your drinks (2026-10-09)
+  cheesesmithing: ["Wisdom Tea", "Efficiency Tea", "Artisan Tea"], crafting: ["Wisdom Tea", "Efficiency Tea", "Artisan Tea"], tailoring: ["Wisdom Tea", "Efficiency Tea", "Artisan Tea"],
+  cooking: ["Wisdom Tea", "Gourmet Tea", "Artisan Tea"], brewing: ["Wisdom Tea", "Gourmet Tea", "Artisan Tea"],
+};
+for (const k of SKILLS) UI.drinks[k] = [...DRINK_DEFAULTS[k]];
+{
+  const saved = store.get("mw.drinks", {}), savedSecs = store.get("mw.drinkSecs", null);
+  for (const k of SKILLS) if (Array.isArray(saved[k])) saved[k].slice(0, DRINK_SLOTS).forEach((n, i) => { if (typeof n === "string") UI.drinks[k][i] = n; });
+  if (typeof savedSecs === "number" && savedSecs > 0) UI.drinkSecs = savedSecs;
+}
+const saveDrinks = () => { store.set("mw.drinks", UI.drinks); store.set("mw.drinkSecs", UI.drinkSecs); };
+const drinkNames = (skill) => (drinkTab && drinkTab.has(skill) ? new Set(drinkTab.get(skill).names) : null); // drinks that can be used in the skill (null = unknown: any item)
 const buffs = (skill) => UI.skills[skill] || BUFF_DEFAULTS; // a skill that is not listed above uses the defaults
 function buildSettings() {
   const th = el("tr", {}, el("th", { scope: "col", text: "Skill" }), ...BUFF_COLS.map(([, title, tip]) => el("th", { scope: "col", title: tip, text: title })));
@@ -871,24 +889,81 @@ function buildSettings() {
     }
     tb.append(tr);
   }
+  $("drink-secs").addEventListener("input", (e) => { const v = parseFloat(e.target.value); UI.drinkSecs = v > 0 ? v : DRINK_SECS; saveDrinks(); renderDrinkCost(); costCache.clear(); });
+  const dh = $("drinktable").tHead, db = $("drinktable").tBodies[0]; db.replaceChildren();
+  dh.replaceChildren(el("tr", {}, el("th", { scope: "col", text: "Skill" }), ...Array.from({ length: DRINK_SLOTS }, (_, i) => el("th", { scope: "col", text: "Drink " + (i + 1) })), el("th", { scope: "col", text: "Cost per hour", title: "The three drinks at the ask, bought again every Duration seconds" })));
+  for (const skill of SKILLS) {
+    const tr = el("tr", {}, el("td", { class: "name", text: skill.charAt(0).toUpperCase() + skill.slice(1) }));
+    for (let i = 0; i < DRINK_SLOTS; i++) {
+      const inp = el("input", { type: "text", list: "drinks-" + skill, id: "d-" + skill + "-" + i, autocomplete: "off", placeholder: "none", "aria-label": skill + " drink " + (i + 1) });
+      const ok = (v) => { const names = drinkNames(skill); return D.byName.has(v) && (!names || names.has(v)); }; // only drinks the skill can use
+      const set = () => { const v = inp.value.trim(); UI.drinks[skill][i] = ok(v) ? v : ""; saveDrinks(); renderDrinkCost(); costCache.clear(); };
+      inp.addEventListener("change", () => { set(); if (!UI.drinks[skill][i]) inp.value = ""; });
+      inp.addEventListener("input", () => { if (ok(inp.value.trim()) || inp.value.trim() === "") set(); });
+      tr.append(el("td", {}, inp));
+    }
+    tr.append(el("td", { id: "d-cost-" + skill, class: "flat" }));
+    db.append(tr);
+  }
   syncSkillBoxes();
 }
+// Drink cost per second of crafting for a skill, at the latest ask (a drink that is not on the market costs nothing).
+function drinkPerSec(skill) {
+  const st = stateAt(D.latest.id);
+  let sum = 0;
+  for (const n of UI.drinks[skill] || []) { const it = n && D.byName.get(n), v = it && st.get(it.id + "|0"); if (v && v.ask > 0) sum += v.ask; }
+  return sum / UI.drinkSecs;
+}
+function fillDrinkLists() { // one suggestion list per skill with only the drinks it can use (combat drinks are not usable in crafting)
+  if (!D.latest) return;
+  hasRecipes();
+  for (const skill of SKILLS) {
+    let dl = $("drinks-" + skill);
+    if (!dl) { dl = el("datalist", { id: "drinks-" + skill }); document.body.append(dl); }
+    const names = drinkNames(skill);
+    dl.replaceChildren(...[...(names || D.byName.keys())].sort().map((n) => el("option", { value: n })));
+  }
+  for (const skill of SKILLS) for (let i = 0; i < DRINK_SLOTS; i++) if (UI.drinks[skill][i] && drinkNames(skill) && !drinkNames(skill).has(UI.drinks[skill][i])) UI.drinks[skill][i] = ""; // a saved drink the skill cannot use
+}
+function renderDrinkCost() { if (D.latest) for (const skill of SKILLS) { const e = $("d-cost-" + skill); if (e) e.textContent = fmt(drinkPerSec(skill) * 3600); } }
 function syncSkillBoxes() {
+  { const e = $("drink-secs"); if (e && document.activeElement !== e) e.value = String(UI.drinkSecs); }
+  for (const skill of SKILLS) for (let i = 0; i < DRINK_SLOTS; i++) { const e = $("d-" + skill + "-" + i); if (e && document.activeElement !== e) e.value = UI.drinks[skill][i]; }
+  renderDrinkCost();
   for (const skill of SKILLS) for (const [key] of BUFF_COLS) { const e = $("s-" + key + "-" + skill); if (e && document.activeElement !== e) e.value = String(UI.skills[skill][key]); }
 }
 
 // ------------------------------------------------------------------ crafting tab
 /* Every craftable item at the latest snapshot, priced instant in, instant out: ingredients bought at the ask, the item sold at the bid
    minus MARKET_TAX.  Uses the same recipes, buffs and time as the item chart, so the numbers agree with its cost and revenue lines.
-     Cost    = materials (cut at depth 1 for "1 step", or at the deepest depth for "Full") + crafting time x hour value
+     Revenue = bid after tax + the expected essence and rare drops after tax (dropValue)
+     Cost    = materials (cut at depth 1 for "1 step", or at the deepest depth for "Full") + drinks (their cost per second x crafting time) + crafting time x hour value
      Profit  = revenue - cost
-     Per hour = (revenue - materials) / crafting hours  (before the hour value: the hour value at which profit would be zero)
+     Per hour = (revenue - materials - drinks) / crafting hours  (before the hour value: the hour value at which profit would be zero)
    Items with no bid, or an ingredient with no ask, are left out.  Computed on the fly, nothing is stored: it depends on the settings. */
 const SETTINGS = [ // only the hour value is shared like this now; the buffs are per skill (Settings tab): [state key, item-tab input, crafting-tab input, scale (box value x scale = state), cleaner]
   ["hour", "i-hour", "c-hour", 1e6, (v) => (v >= 0 ? v : 0)],
 ];
 function syncSettings() { // both tabs show the same settings; never overwrite a box that is being typed in
   for (const [k, a, b, scale] of SETTINGS) for (const id of [a, b]) { const e = $(id); if (document.activeElement !== e) e.value = String(+(UI[k] / scale).toFixed(4)); }
+}
+/* Expected value of the essence and rare drops of one unit of a craftable item, in coin after tax: each craft rolls every drop, chance x (1 + essence/rare find %),
+   count = the middle of its range (the game lists drops, drinks and tax per action, which is 1 + efficiency crafts; the same numbers per craft are what this uses);
+   dropped items are valued at the bid minus the market tax (coin is not taxed).  A crate is valued by its loot table the same way.
+   Per unit: divided by the units one craft makes. */
+function dropValue(item, st, idOf) {
+  const r = recipes.get(item), list = dropTab.get(item);
+  if (!r || !list) return 0;
+  const net = (h, depth) => { // value of one dropped item
+    if (h === COIN) return 1;
+    const id = idOf.get(h), v = id == null ? null : st.get(id + "|0");
+    if (v && v.bid > 0) return v.bid * TAXKEEP;
+    return depth < 2 && lootTab.has(h) ? lootTab.get(h).reduce((n, x) => n + x.rate * x.avg * net(x.item, depth + 1), 0) : 0; // not traded: a crate is worth its contents
+  };
+  const b = buffs(r.skill);
+  let sum = 0;
+  for (const d of list) sum += d.rate * (1 + (d.kind === "essence" ? b.essence : b.rare) / 100) * d.avg * net(d.drop, 0);
+  return sum / expectedOut(r);
 }
 function craftData() {
   if (!hasRecipes() || !recipes.size) return null;
@@ -901,22 +976,27 @@ function craftData() {
     const rows = depthRows(hrid).rows;
     if (!rows.length) continue;
     const cutD = one ? 1 : Math.max(...rows.map((r) => r[0]));
-    let mat = 0, ok = true, secs = unitSecs(hrid);
+    let mat = 0, ok = true, secs = unitSecs(hrid), drops = dropValue(hrid, st, idOf), drinks = secs * drinkPerSec(recipes.get(hrid).skill);
     for (const [d, ing, q] of rows) {
       if (d === cutD || (d < cutD && !craftSet.has(ing))) { const p = ask(ing); if (p == null) { ok = false; break; } mat += q * p; } // bought
-      else if (d < cutD) secs += q * unitSecs(ing); // crafted above the cut
+      else if (d < cutD) { // crafted above the cut: its time, drinks and drops count too
+        const u = q * unitSecs(ing);
+        secs += u; drinks += u * drinkPerSec(recipes.get(ing).skill); drops += q * dropValue(ing, st, idOf);
+      }
     }
     if (!ok) continue;
-    const rev = me.bid * (1 - MARKET_TAX), cost = mat + secs * per, hrs = secs / 3600;
-    list.push({ id, name: D.items.get(id).name, rev, cost, profit: rev - cost, margin: cost > 0 ? ((rev - cost) / cost) * 100 : null,
-      perHour: hrs > 0 ? (rev - mat) / hrs : null, secs: hrs > 0 ? secs : null, units: me.volume });
+    const rev = me.bid * (1 - MARKET_TAX) + drops, cost = mat + drinks + secs * per, hrs = secs / 3600;
+    list.push({ id, name: D.items.get(id).name, rev, drops, drinks, cost, profit: rev - cost, margin: cost > 0 ? ((rev - cost) / cost) * 100 : null,
+      perHour: hrs > 0 ? (rev - mat - drinks) / hrs : null, secs: hrs > 0 ? secs : null, units: me.volume });
   }
   return list;
 }
 const CRAFT_COLS = [
-  { k: "name", label: "Item", tip: "" }, { k: "rev", label: "Revenue", tip: "Bid minus the 4% tax" }, { k: "cost", label: "Cost", tip: "Materials at ask, plus crafting time at the hour value" },
+  { k: "name", label: "Item", tip: "" }, { k: "rev", label: "Revenue", tip: "Bid minus the 4% tax, plus the expected value of the essence and rare drops (also after tax; see Drops)" },
+  { k: "drops", label: "Drops", tip: "Of the revenue: the expected essence and rare drops per item, at the bid minus the tax, with the essence and rare find from the Settings tab. Crates are valued by their contents" },
+  { k: "cost", label: "Cost", tip: "Materials at ask, plus the drinks of the Settings tab (by crafting time), plus crafting time at the hour value" },
   { k: "profit", label: "Profit", tip: "Revenue minus cost, per item" }, { k: "margin", label: "Margin", tip: "Profit as a percentage of the cost" },
-  { k: "perHour", label: "Per hour", tip: "(Revenue minus materials) per crafting hour, before the hour value" }, { k: "secs", label: "Time", tip: "Crafting time per item, real time with speed and efficiency" },
+  { k: "perHour", label: "Per hour", tip: "(Revenue minus materials and drinks) per crafting hour, before the hour value" }, { k: "secs", label: "Time", tip: "Crafting time per item, real time with speed and efficiency" },
   { k: "units", label: "Units/h", tip: "Units traded in the last hour" },
 ];
 function renderCraft() {
@@ -949,11 +1029,11 @@ function renderCraft() {
   const sign = (v) => (v > 0 ? "up" : v < 0 ? "down" : "");
   for (const r of list) {
     const nm = el("button", { text: r.name }); nm.addEventListener("click", () => openItem(r.id, 0));
-    tb.append(el("tr", {}, el("td", { class: "name" }, nm), el("td", { text: fmt(r.rev) }), el("td", { text: fmt(r.cost) }),
+    tb.append(el("tr", {}, el("td", { class: "name" }, nm), el("td", { text: fmt(r.rev) }), el("td", { text: fmt(r.drops) }), el("td", { text: fmt(r.cost) }),
       el("td", { class: sign(r.profit), text: fmt(r.profit) }), el("td", { class: sign(r.margin), text: r.margin == null ? "—" : r.margin.toFixed(r.margin < 10 ? 1 : 0) + "%" }),
       el("td", { class: sign(r.perHour), text: r.perHour == null ? "—" : fmt(r.perHour) }), el("td", { text: r.secs == null ? "—" : fmtDur(r.secs) }), el("td", { text: full(r.units) })));
   }
-  if (!list.length) tb.append(el("tr", {}, el("td", { colspan: "8", class: "empty", text: "No items match these filters." })));
+  if (!list.length) tb.append(el("tr", {}, el("td", { colspan: "9", class: "empty", text: "No items match these filters." })));
 }
 for (const [k, , cid, scale, clean] of SETTINGS) $(cid).addEventListener("input", (e) => { UI[k] = clean(parseFloat(e.target.value)) * scale; costCache.clear(); renderCraft(); });
 for (const b of $("c-mode").children) b.addEventListener("click", () => { UI.craft.mode = b.dataset.m; renderCraft(); });
@@ -1108,6 +1188,24 @@ function hasRecipes() {
     const hasTime = rows("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'item_craft_time'").length > 0;
     craftSecs = new Map(hasTime ? rows("SELECT item_hrid, secs FROM item_craft_time") : []); // crafting seconds per unit; empty = no time data
   }
+  if (dropTab == null) { // essence and rare drops per craft, and the contents of crates (empty when the database predates these tables)
+    const has = (t) => rows("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '" + t + "'").length > 0;
+    dropTab = new Map(); lootTab = new Map(); drinkTab = new Map(); // drinkTab: skill -> { names usable in it, seconds one lasts }
+    if (has("drink")) for (const [hrid, skill, secs] of rows("SELECT item_hrid, skill, seconds FROM drink")) {
+      const it = D.byName.get(pretty(hrid));
+      if (!it) continue;
+      if (!drinkTab.has(skill)) drinkTab.set(skill, { names: [], secs });
+      drinkTab.get(skill).names.push(it.name);
+    }
+    if (has("item_drop")) for (const [item, kind, drop, rate, mn, mx] of rows("SELECT item_hrid, kind, drop_hrid, rate, min_count, max_count FROM item_drop")) {
+      if (!dropTab.has(item)) dropTab.set(item, []);
+      dropTab.get(item).push({ kind, drop, rate, avg: (mn + mx) / 2 });
+    }
+    if (has("loot_table")) for (const [box, item, rate, mn, mx] of rows("SELECT container_hrid, item_hrid, rate, min_count, max_count FROM loot_table")) {
+      if (!lootTab.has(box)) lootTab.set(box, []);
+      lootTab.get(box).push({ item, rate, avg: (mn + mx) / 2 });
+    }
+  }
   return hasDepth;
 }
 
@@ -1116,8 +1214,8 @@ const GOURMET_SKILLS = new Set(["cooking", "brewing"]);
 const expectedOut = (r) => r.out + (GOURMET_SKILLS.has(r.skill) ? buffs(r.skill).gourmet / 100 : 0);
 
 /* The ingredients of one unit of an item at every depth of its recipe tree, with the artisan and gourmet buffs of each step's skill applied:
-   - artisan: every ingredient except the upgrade item needs ceil(count / (1 + artisan%)) per craft (coin and shards included).
-     Rounding is per craft, so it cannot be done on summed totals.
+   - artisan: every ingredient except the upgrade item needs count / (1 + artisan%) per craft on average (coin and shards included).
+     The game needs the rounded-up amount to start a craft but then uses the fraction as a chance (2.7: 3 to start, 30% chance to keep one), so the average is the plain fraction.
    - gourmet (cooking and brewing only): a craft makes out + gourmet% items on average, so per unit everything is divided by that
      expected output instead of by the plain output count (the upgrade item too).
    Returns { rows: [[depth, ingredient, qty], ...], gourmet: true if a gourmet step is in the tree }.
@@ -1134,7 +1232,7 @@ function depthRows(hrid) {
       if (GOURMET_SKILLS.has(r.skill)) gourmet = true;
       const e = expectedOut(r), f = 1 + buffs(r.skill).artisan / 100; // artisan of this step's own skill
       for (const x of r.rows) {
-        const n = x.up ? x.count : Math.ceil(x.count / f - 1e-9); // -1e-9: float noise must not round an exact result up
+        const n = x.up ? x.count : x.count / f; // expected amount: the game needs the rounded-up amount to start but keeps the unused part with the matching chance (2.7 -> 3 to start, 30% chance to keep one)
         nxt.set(x.ing, (nxt.get(x.ing) || 0) + (q * n) / e);
       }
     }
@@ -1144,7 +1242,7 @@ function depthRows(hrid) {
   return { rows: out, gourmet };
 }
 /* Crafting seconds per unit of an item (speed, efficiency and gourmet of the recipe's skill).  craftSecs holds base time / output count, so base time per craft = that x out.
-   - speed: the action time is divided by speed% / 100 (133.75% -> 30 s becomes 22.4 s).
+   - speed: the action time is divided by 1 + speed% / 100 (Arcane Lumber: 30 s / (1 + 143.9%) = 12.3 s per action, as the game shows).
    - efficiency: each action does 1 + efficiency% crafts on average (126% -> always 2, 26% chance of a 3rd); the extra crafts are not free
      (they use ingredients as usual), so efficiency only shortens the time.  Efficiency = the Effic. % setting + 1% for each level of the skill above the
      recipe's level requirement (see effOf).
@@ -1152,7 +1250,7 @@ function depthRows(hrid) {
 const effOf = (r) => { const b = buffs(r.skill); return b.eff + (r.lvl ? Math.max(0, b.level - r.lvl - (b.artisan > 0 ? ARTISAN_LEVEL_PENALTY : 0)) : 0); }; // % efficiency of a recipe: setting + 1% per level above its requirement (which artisan raises by 5)
 const unitSecs = (item) => {
   const r = recipes.get(item);
-  return r ? ((craftSecs.get(item) || 0) * r.out) / expectedOut(r) / (buffs(r.skill).speed / 100) / (1 + effOf(r) / 100) : 0;
+  return r ? ((craftSecs.get(item) || 0) * r.out) / expectedOut(r) / (1 + buffs(r.skill).speed / 100) / (1 + effOf(r) / 100) : 0;
 };
 
 function costSeries(hrid) { // arrays aligned with D.snaps; null = recipe unknown or an ingredient is not on the market
@@ -1286,6 +1384,7 @@ function afterLoad() {
   $("meta").textContent = `${D.snaps.length} snapshot${D.snaps.length === 1 ? "" : "s"} · ${D.items.size} items · latest ${when(D.latest.ts)} (${ago(age)} ago) · first ${when(D.snaps[0].ts)}`;
   const lv = $("f-level"); lv.replaceChildren(...D.levels.map((l) => el("option", { value: l, text: "+" + l })));
   lv.value = String(UI.level);
+  fillDrinkLists(); syncSkillBoxes();
   $("itemlist").replaceChildren(...[...D.byName.keys()].sort().map((n) => el("option", { value: n })));
   $("f-window").value = UI.windowId; $("f-minvol").value = UI.minvol;
   UI.item = null;

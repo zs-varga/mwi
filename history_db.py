@@ -9,6 +9,11 @@ Schema
     item_recipe(item_hrid, ingredient_hrid, count, is_upgrade, output_count, skill, level_requirement)
                                         one row per recipe ingredient, reloaded every run from --recipes (see load_recipes)
     item_craft_time(item_hrid, secs)    crafting seconds per unit of each craftable item, reloaded every run from --craft-times
+    item_drop(item_hrid, kind, drop_hrid, rate, min_count, max_count)
+                                        essence/rare drops per craft of each craftable item, reloaded every run from --drops
+    loot_table(container_hrid, item_hrid, rate, min_count, max_count)
+                                        what each crate/chest holds, reloaded every run from --loot
+    drink(item_hrid, skill, seconds)    the skills each drink can be used in and its duration, reloaded every run from --drinks
     item(item_id, hrid)                 one row per item, name stored once
     snapshot(snapshot_id, ts)           one row per imported snapshot (ts = the game's unix timestamp)
     obs(item_id, level, snapshot_id,    one row per (item, enhancement level) *whenever it changed*
@@ -194,6 +199,85 @@ def load_recipes(con, path):
     print(f"loaded {len(rows)} rows into item_recipe")
 
 
+DROP_SCHEMA = """
+DROP TABLE IF EXISTS item_drop;
+CREATE TABLE item_drop (
+  item_hrid TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  drop_hrid TEXT NOT NULL,
+  rate REAL NOT NULL,
+  min_count REAL NOT NULL,
+  max_count REAL NOT NULL,
+  PRIMARY KEY (item_hrid, kind, drop_hrid)
+) WITHOUT ROWID;
+"""
+
+LOOT_SCHEMA = """
+DROP TABLE IF EXISTS loot_table;
+CREATE TABLE loot_table (
+  container_hrid TEXT NOT NULL,
+  item_hrid TEXT NOT NULL,
+  rate REAL NOT NULL,
+  min_count REAL NOT NULL,
+  max_count REAL NOT NULL
+);
+"""
+
+
+def load_drops(con, path):
+    """(Re)load item_drop from the CSV exported by the game-data project: the essence and rare drops of one craft of each
+    craftable item (kind = 'essence' or 'rare'; rate = chance per craft before the essence find / rare find buffs;
+    min_count..max_count = how many drop)."""
+    if not os.path.exists(path):
+        print(f"{path} not found - drop table left as it is")
+        return
+    with gzip.open(path, "rt", encoding="utf-8", newline="") as f:
+        rows = [(r["item_hrid"], r["kind"], r["drop_hrid"], float(r["rate"]), float(r["min_count"]), float(r["max_count"])) for r in csv.DictReader(f)]
+    with con:
+        con.executescript(DROP_SCHEMA)
+        con.executemany("INSERT INTO item_drop VALUES (?,?,?,?,?,?)", rows)
+    print(f"loaded {len(rows)} rows into item_drop")
+
+
+def load_loot(con, path):
+    """(Re)load loot_table from the CSV exported by the game-data project: what each openable crate/chest/cache holds
+    (rate = chance per opening, min_count..max_count = how many).  Used to value rare drops that are crates."""
+    if not os.path.exists(path):
+        print(f"{path} not found - loot table left as it is")
+        return
+    with gzip.open(path, "rt", encoding="utf-8", newline="") as f:
+        rows = [(r["container_hrid"], r["item_hrid"], float(r["rate"]), float(r["min_count"]), float(r["max_count"])) for r in csv.DictReader(f)]
+    with con:
+        con.executescript(LOOT_SCHEMA)
+        con.executemany("INSERT INTO loot_table VALUES (?,?,?,?,?)", rows)
+    print(f"loaded {len(rows)} rows into loot_table")
+
+
+DRINK_SCHEMA = """
+DROP TABLE IF EXISTS drink;
+CREATE TABLE drink (
+  item_hrid TEXT NOT NULL,
+  skill TEXT NOT NULL,
+  seconds REAL NOT NULL,
+  PRIMARY KEY (item_hrid, skill)
+) WITHOUT ROWID;
+"""
+
+
+def load_drinks(con, path):
+    """(Re)load drink from the CSV exported by the game-data project: one row per drink and skill it can be used in
+    (the action type: cheesesmithing, crafting, ..., combat), seconds = how long one drink lasts."""
+    if not os.path.exists(path):
+        print(f"{path} not found - drink table left as it is")
+        return
+    with gzip.open(path, "rt", encoding="utf-8", newline="") as f:
+        rows = [(r["item_hrid"], r["skill"], float(r["seconds"])) for r in csv.DictReader(f)]
+    with con:
+        con.executescript(DRINK_SCHEMA)
+        con.executemany("INSERT INTO drink VALUES (?,?,?)", rows)
+    print(f"loaded {len(rows)} rows into drink")
+
+
 def file_timestamp(path):
     m = re.search(r"marketplace_(\d+)\.json", os.path.basename(path))
     return int(m.group(1)) if m else 0
@@ -210,6 +294,9 @@ def main():
     ap.add_argument("--depths", default="item_ingredient_depth.csv.gz", help="recipe depth table (CSV, gzip) to load")
     ap.add_argument("--craft-times", default="item_craft_time.csv.gz", help="crafting seconds per unit (CSV, gzip) to load")
     ap.add_argument("--recipes", default="item_recipe.csv.gz", help="recipes (CSV, gzip) to load")
+    ap.add_argument("--drops", default="item_drop.csv.gz", help="essence and rare drops per craft (CSV, gzip) to load")
+    ap.add_argument("--loot", default="loot_table.csv.gz", help="crate/chest contents (CSV, gzip) to load")
+    ap.add_argument("--drinks", default="drink.csv.gz", help="drinks and the skills they can be used in (CSV, gzip) to load")
     ap.add_argument("--rebuild", action="store_true", help="delete the database and import everything again")
     args = ap.parse_args()
 
@@ -254,6 +341,9 @@ def main():
     load_depths(con, args.depths)
     load_craft_times(con, args.craft_times)
     load_recipes(con, args.recipes)
+    load_drops(con, args.drops)
+    load_loot(con, args.loot)
+    load_drinks(con, args.drinks)
     con.close()
 
 
