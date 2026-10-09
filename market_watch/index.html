@@ -566,14 +566,17 @@ function timeChart(host, o) {
     if (p.band) { // shaded range between lo (bid) and hi (ask); each edge has its own colour
       const { lo, hi } = p.band, fill = p.band.fill || "var(--ink-2)",
          cols = [[hi, p.band.hiColor], [lo, p.band.loColor]];
-      for (const seg of segments([lo, hi])) {
-        if (seg.length < 2) { for (const [arr, c] of cols) edges.push(sv("circle", { cx: X(ts[seg[0]]), cy: Y(arr[seg[0]]), r: 2.5, fill: c })); continue; }
+      for (const seg of segments([lo, hi])) { // the shading needs both edges
+        if (seg.length < 2) continue;
         const top_ = seg.map((i, k) => (k ? "L" : "M") + X(ts[i]).toFixed(1) + " " + Y(hi[i]).toFixed(1)).join(" ");
         const bot_ = [...seg].reverse().map((i) => "L" + X(ts[i]).toFixed(1) + " " + Y(lo[i]).toFixed(1)).join(" ");
         svg.append(sv("path", { d: top_ + " " + bot_ + " Z", fill, "fill-opacity": 0.12 }));
-        for (const [arr, c] of cols) // the bid and ask lines are drawn after the trade line, so they sit on top of it
-          edges.push(sv("path", { d: seg.map((i, k) => (k ? "L" : "M") + X(ts[i]).toFixed(1) + " " + Y(arr[i]).toFixed(1)).join(" "), fill: "none", stroke: c, "stroke-width": 1.5, "stroke-linejoin": "round" }));
       }
+      for (const [arr, c] of cols) // each line runs wherever its own side has an order (a missing bid must not hide the ask); drawn after the trade line, so they sit on top of it
+        for (const seg of segments([arr])) {
+          if (seg.length < 2) edges.push(sv("circle", { cx: X(ts[seg[0]]), cy: Y(arr[seg[0]]), r: 2.5, fill: c }));
+          else edges.push(sv("path", { d: seg.map((i, k) => (k ? "L" : "M") + X(ts[i]).toFixed(1) + " " + Y(arr[i]).toFixed(1)).join(" "), fill: "none", stroke: c, "stroke-width": 1.5, "stroke-linejoin": "round" }));
+        }
       for (const [arr, c] of cols) { hoverDots.push({ vals: arr, Y, color: c }); labels.push({ vals: arr, Y, color: c }); }
     }
     for (const l of p.lines || []) {
