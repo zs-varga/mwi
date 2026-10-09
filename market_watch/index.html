@@ -1291,7 +1291,9 @@ for (const b of $("f-dir-l").querySelectorAll("button")) b.addEventListener("cli
   for (const x of $("f-dir-l").querySelectorAll("button")) x.setAttribute("aria-pressed", String(x === b));
   render();
 });
-$("i-search").addEventListener("change", (e) => { const it = D.byName.get(e.target.value); if (it) { UI.item = it.id; UI.itemLevel = 0; renderItem(); } });
+const pickItem = (e) => { const it = D.byName.get(e.target.value); if (it && (it.id !== UI.item || e.type === "change")) { UI.item = it.id; UI.itemLevel = 0; renderItem(); } };
+$("i-search").addEventListener("change", pickItem);
+$("i-search").addEventListener("input", pickItem); // Firefox fires "change" on a datalist pick only when the field loses focus
 $("i-level").addEventListener("change", (e) => { UI.itemLevel = +e.target.value; renderItem(); });
 $("i-star").addEventListener("click", () => { if (UI.item == null) return; toggleWatch(UI.item + "|" + UI.itemLevel); renderItem(); });
 $("i-hour").addEventListener("input", (e) => { const v = parseFloat(e.target.value); UI.hour = v >= 0 ? v * 1e6 : 0; renderItem(); });
