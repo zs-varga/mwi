@@ -528,7 +528,9 @@ function timeChart(host, o) {
   const hoverDots = [];
   const defs0 = sv("defs"), pat = sv("pattern", { id: "nosnap", width: 7, height: 7, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" });
   pat.append(sv("line", { x1: 0, y1: 0, x2: 0, y2: 7, stroke: "var(--axis)", "stroke-width": 1.2 }));
-  defs0.append(pat); svg.append(defs0);
+  const pat2 = sv("pattern", { id: "outrange", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(-45)" });
+  pat2.append(sv("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "var(--sell)", "stroke-width": 1, "stroke-opacity": 0.35 }));
+  defs0.append(pat, pat2); svg.append(defs0);
   let top = m.t;
   for (const p of panels) {
     const fmtTick = p.fmtTick || fmt, vals = [];
@@ -543,6 +545,16 @@ function timeChart(host, o) {
     const ph = p.h, ptop = top, Y = (v) => ptop + ph - ((v - y0) / (y1 - y0)) * ph; // ptop is fixed per panel: the Y function is also used later by the hover dots and labels
     for (let i = 1; i < N; i++) if (ts[i] - ts[i - 1] > GAP_SEC) // stretches without snapshots: hatched
       svg.append(sv("rect", { x: X(ts[i - 1]), y: top, width: X(ts[i]) - X(ts[i - 1]), height: ph, fill: "url(#nosnap)" }));
+    const outsideEls = []; // appended after the lines and dots, so the hatching lies on top of them
+    if (p.outside) { // prices outside the tradeable range (above its high edge, below its low edge) are hatched (edges clamped to the panel)
+      const { lo, hi } = p.outside, cl = (v) => Math.min(top + ph, Math.max(top, Y(v)));
+      for (const seg of segments([lo, hi])) {
+        const pts_ = (arr) => seg.map((i) => X(ts[i]).toFixed(1) + " " + cl(arr[i]).toFixed(1));
+        const xa = X(ts[seg[0]]).toFixed(1), xb = X(ts[seg[seg.length - 1]]).toFixed(1);
+        outsideEls.push(sv("path", { d: "M" + xa + " " + top + " L" + pts_(hi).join(" L") + " L" + xb + " " + top + " Z", fill: "url(#outrange)" }));
+        outsideEls.push(sv("path", { d: "M" + xa + " " + (top + ph) + " L" + pts_(lo).join(" L") + " L" + xb + " " + (top + ph) + " Z", fill: "url(#outrange)" }));
+      }
+    }
     for (const v of ticks) {
       svg.append(sv("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)", "stroke-width": 1 }));
       const t = sv("text", { x: m.l - 8, y: Y(v) + 4, "text-anchor": "end", fill: "var(--muted)", "font-size": 11 }); t.textContent = fmtTick(v); svg.append(t);
@@ -566,10 +578,11 @@ function timeChart(host, o) {
     if (p.band) { // shaded range between lo (bid) and hi (ask); each edge has its own colour
       const { lo, hi } = p.band, fill = p.band.fill || "var(--ink-2)",
          cols = [[hi, p.band.hiColor], [lo, p.band.loColor]];
+      const { capLo, capHi } = p.band, cap = (v, i) => Math.min(capHi && capHi[i] != null ? capHi[i] : v, Math.max(capLo && capLo[i] != null ? capLo[i] : v, v)); // the shading stops at the tradeable range
       for (const seg of segments([lo, hi])) { // the shading needs both edges
         if (seg.length < 2) continue;
-        const top_ = seg.map((i, k) => (k ? "L" : "M") + X(ts[i]).toFixed(1) + " " + Y(hi[i]).toFixed(1)).join(" ");
-        const bot_ = [...seg].reverse().map((i) => "L" + X(ts[i]).toFixed(1) + " " + Y(lo[i]).toFixed(1)).join(" ");
+        const top_ = seg.map((i, k) => (k ? "L" : "M") + X(ts[i]).toFixed(1) + " " + Y(cap(hi[i], i)).toFixed(1)).join(" ");
+        const bot_ = [...seg].reverse().map((i) => "L" + X(ts[i]).toFixed(1) + " " + Y(cap(lo[i], i)).toFixed(1)).join(" ");
         svg.append(sv("path", { d: top_ + " " + bot_ + " Z", fill, "fill-opacity": 0.12 }));
       }
       for (const [arr, c] of cols) // each line runs wherever its own side has an order (a missing bid must not hide the ask); drawn after the trade line, so they sit on top of it
@@ -596,7 +609,7 @@ function timeChart(host, o) {
       hoverDots.push({ vals: pv, Y, color: p.vline.base }); labels.push({ vals: pv, Y, color: p.vline.base });
     }
     for (const l of p.lines || []) hoverDots.push({ vals: l.vals, Y, color: l.color });
-    svg.append(...edges);
+    svg.append(...edges, ...outsideEls);
     const ends = labels.map((l) => { const i = [...l.vals.keys()].reverse().find((k) => l.vals[k] != null); return i == null ? null : { y: l.Y(l.vals[i]), v: l.vals[i], color: l.color }; })
       .filter(Boolean).sort((a, b) => a.y - b.y);
     const LH = 14; // minimum distance between two labels
@@ -702,6 +715,7 @@ function renderItem() {
     ...(cost ? [lg("rev_bid", el("span", { class: "key dotted", style: "--k:" + cBid }), "Bid revenue")] : []),
     lg("avg", el("span", { class: "dotkey", style: "background:" + c2 }), "Avg trade"),
     ...(cost ? cost.legend.map((e) => lg(e.id, e.swatch, e.label)) : []),
+    lg("range", el("span", { class: "hatch", style: "background:repeating-linear-gradient(-45deg, transparent 0 3px, " + cssv("--sell") + " 3px 4px);opacity:.6" }), "Outside tradable range (est.)"),
     el("span", {}, el("span", { class: "hatch" }), "No data"));
   body.replaceChildren(el("div", { class: "card" }, el("div", { class: "charthead" }, el("h3", { text: it.name })), el("div", { style: "margin:0 0 8px" }, legend), host));
   if (pts.length < 2) {
@@ -711,6 +725,7 @@ function renderItem() {
   const pctFmt = (v) => v.toFixed(v < 10 ? 2 : 1) + "%";
   const showAsk = !off("ask"), showBid = !off("bid");
   const afterTax = (arr) => arr.map((v) => (v == null ? null : v * (1 - MARKET_TAX))); // what a sale at that price brings in
+  const rs = rangeSeries(all), i0 = all.indexOf(pts[0]), rLoV = rs.lo.slice(i0, i0 + pts.length), rHiV = rs.hi.slice(i0, i0 + pts.length);
   const revAsk = afterTax(ask), revBid = afterTax(bid), dotted = "1.5 5";
   const lines = [...(cost ? cost.lines.filter((l) => !off(l.id)) : [])];
   if (cost && !off("rev_ask")) lines.push({ id: "rev_ask", vals: revAsk, color: cAsk, dash: dotted });
@@ -719,11 +734,13 @@ function renderItem() {
   if (!showAsk && showBid) lines.push({ vals: bid, color: cBid });
   timeChart(host, {
     title: it.name + ": bid-ask range and average trade price, with units traded shown by the size of the dots" + (cost ? ", and the cost of its ingredients" : ""), ts,
-    panels: [{ h: 380, lines, band: showAsk && showBid ? { lo: bid, hi: ask, loColor: cBid, hiColor: cAsk } : undefined, vline: off("avg") ? undefined : { vals: avg, vol, style, base: c2 } }],
+    panels: [{ h: 380, lines, outside: off("range") ? undefined : { lo: rLoV, hi: rHiV }, band: showAsk && showBid ? { lo: bid, hi: ask, loColor: cBid, hiColor: cAsk, capLo: off("range") ? undefined : rLoV, capHi: off("range") ? undefined : rHiV } : undefined, vline: off("avg") ? undefined : { vals: avg, vol, style, base: c2 } }],
     tip: [
       { id: "ask", name: "Ask", color: cAsk, vals: ask, none: "no order" },
       { id: "avg", name: "Average trade price", color: c2, vals: avg, none: "no trades" },
       { id: "bid", name: "Bid", color: cBid, vals: bid, none: "no order" },
+      { id: "range", name: "Range high (est.)", color: cssv("--sell"), dash: true, vals: rHiV, none: "—" },
+      { id: "range", name: "Range low (est.)", color: cssv("--sell"), dash: true, vals: rLoV, none: "—" },
       ...(cost ? cost.tip : []),
       ...(cost ? [{ id: "rev_ask", name: "Ask revenue", color: cAsk, dot: true, vals: revAsk, none: "no order" }, { id: "rev_bid", name: "Bid revenue", color: cBid, dot: true, vals: revBid, none: "no order" }] : []),
       { name: "Units traded (value)", color: null, vals: vol, text: (i) => (vol[i] == null ? "no trades" : full(vol[i]) + (value[i] == null ? "" : " (" + fmt(value[i]) + ")")) },
@@ -974,6 +991,24 @@ const tPick = (a) => { const x = a.filter((v) => v != null).sort((p, q) => p - q
 const TOL = 0.015; // the center is only known to about this accuracy
 const gridNear = (p) => { const st = priceStep(p); return Math.round(p / st) * st; };
 const gridUp = (p) => { const st = priceStep(p); return Math.ceil(p / st) * st; };
+
+/* Estimated tradeable range at every point of a history (same estimate as the Trade tab: +-10% or 2 steps around the best ask, or around the typical
+   trade price of the last 12 hours if the ask is more than 10% away from it).  Returns {lo, hi}, null where there is neither an ask nor a trade. */
+function rangeSeries(all) {
+  const lo = [], hi = [];
+  all.forEach((p, i) => {
+    const v = p.v;
+    if (!v) { lo.push(null); hi.push(null); return; }
+    const t = tPick(all.slice(Math.max(0, i - 11), i + 1).map((q) => (q.v && q.v.volume > 0 ? q.v.price : null)));
+    const ask = v.ask != null && v.ask > 0 ? v.ask : null;
+    let ref = ask != null ? ask : t;
+    if (t != null && ask != null && (ask > 1.1 * t || ask < 0.9 * t)) ref = t;
+    if (ref == null) { lo.push(null); hi.push(null); return; }
+    const half = Math.max(0.1 * ref, 2 * priceStep(ref));
+    lo.push(gridNear(ref - half)); hi.push(gridUp(ref + half));
+  });
+  return { lo, hi };
+}
 
 function tradeRows() {
   const out = [];
