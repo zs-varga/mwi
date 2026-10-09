@@ -1111,7 +1111,7 @@ function tradeRows() {
     const B = bidIn != null ? Math.min(tickUp(bidIn), hi) : lo, A = askIn != null ? Math.max(tickDown(askIn), lo) : hi;
     if (B >= A) continue;
     out.push({ iid, name: D.items.get(iid).name, B, A, lo, hi, noBid: bidIn == null, noAsk: askIn == null, queue: bidIn == null || askIn == null,
-      margin: (TAXKEEP * A - B) / B, spread: A - B,
+      margin: (TAXKEEP * A - B) / B, spread: ((A - B) / B) * 100,
       hours: traded / W });
   }
   return out;
@@ -1123,7 +1123,7 @@ const TRADE_COLS = [
   { k: "A", label: "Ask for", tip: "Price to post a sell order at: the best ask minus one grid step" },
   { k: "margin", label: "Net margin", tip: "(96% of the ask for - bid for) / bid for: profit of one round trip at today's quotes inside the range, after the 4% tax. With no competition on a side it uses the range edge, so it is the most you could set." },
   { k: "lo", label: "Range", tip: "Estimated tradeable range (about +-10% around the best ask, bounds on the price grid). A green low bound means no bid inside the range, a green high bound no ask: nobody ahead of you in the queue on that side (Bid for / Ask for then sit at that bound, the best margin you could set)." },
-  { k: "spread", label: "Spread", tip: "Ask for minus bid for, in coins" },
+  { k: "spread", label: "Spread", tip: "Ask for minus bid for, as a percentage of bid for" },
   { k: "hours", label: "Hours traded", tip: "Share of the last 24 hours in which the item traded at all" },
 ];
 
@@ -1159,7 +1159,7 @@ function renderTrade() {
       el("td", { class: sg(r.margin), text: pctTxt(r.margin) }),
       el("td", {}, el("span", { class: r.noBid ? "nocomp" : "", title: r.noBid ? "no bid inside the range" : "", text: fmt(r.lo) }), " – ",
         el("span", { class: r.noAsk ? "nocomp" : "", title: r.noAsk ? "no ask inside the range" : "", text: fmt(r.hi) })),
-      el("td", { text: full(r.spread) }), el("td", { text: Math.round(r.hours * 100) + "%" })));
+      el("td", { text: r.spread.toFixed(1) + "%" }), el("td", { text: Math.round(r.hours * 100) + "%" })));
   }
   if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(TRADE_COLS.length), class: "empty", text: "Nothing has a net margin of at least 5% and trades in at least half of the hours." })));
 }
