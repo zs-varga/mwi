@@ -916,8 +916,7 @@ $("t-search").addEventListener("input", (e) => { UI.trade.search = e.target.valu
 // ------------------------------------------------------------------ trade
 /* A plain spread screen, no model.  Each item has a tradeable price range (about +-10% around a slowly moving center, or +-2 grid steps if that is wider,
    bounds on the price grid); an order outside it sits inactive until the range moves, but marketplace.json still reports it as the best bid or ask.
-   The center is not published; it matched the best ask to within about 0.5% on most items checked (Advanced Food Crate, Philosophers Mirror exactly, Hatchet 1.6% off),
-   so the range here is estimated around the best ask (around the median trade price if the ask is far from recent trades).  Quotes outside the estimated range
+   The center is not published; centerSeries below estimates it from the trade prices and quotes (see there).  Quotes outside the estimated range
    (with 1.5% tolerance for the center error) are ignored.  Where no bid (or ask) is left in the range there is no queue on that side: Bid for becomes the range floor,
    Ask for the range ceiling, which is the best margin you could set, not a guarantee.  Otherwise Bid for = best bid + one grid step, Ask for = best ask - one step.
    Net margin = (96% of ask for - bid for) / bid for.  The 12 h margin does the same with the median best bid and ask of the last 12 snapshots, so a one-hour spread
@@ -938,27 +937,47 @@ const tickDown = (p) => p - priceStep(Math.max(1, p - 1)); // next price below p
 
 const MIN_MARGIN = 0.05, MIN_HOURS = 0.5; // fixed filters: net margin at least 5%, traded in at least half of the last 24 hours
 UI.trade = { sort: { key: "margin", dir: -1 }, search: "" };
-const tPick = (a) => { const x = a.filter((v) => v != null).sort((p, q) => p - q); return x.length ? x[x.length >> 1] : null; }; // an observed price near the median
 
 const TOL = 0.015; // the center is only known to about this accuracy
 const gridNear = (p) => { const st = priceStep(p); return Math.round(p / st) * st; };
 const gridUp = (p) => { const st = priceStep(p); return Math.ceil(p / st) * st; };
 
-/* Estimated tradeable range at every point of a history (same estimate as the Trade tab: +-10% or 2 steps around the best ask, or around the typical
-   trade price of the last 12 hours if the ask is more than 10% away from it).  Returns {lo, hi}, null where there is neither an ask nor a trade. */
+/* Center of the tradeable range at every point of a history, fitted to 26 ranges read in the game (mean error 1.6%, median 1.0%, worst 5.8%).
+   The center moves toward a target by at most 1% per hour (marketplaceLimits.bandMaxMovePerPassFactor).  While the item trades, the target is the mean
+   trade price of the last 24 h; once there has been no trade for 6 h it is the mean of the best bid and ask that lie within 1.2x of the center (quotes
+   further out are ignored, a 1T placeholder ask or a stray bid at 30% of the price does not move it), and the trade mean if neither is near.
+   Not settled: the exact trade window (24 h and 48 h fit about equally), the dry-up time (between 6 h and 12 h), the quote cutoff (between 1.2x and 1.45x). */
+const CENTER = { capPerHour: 1.01, tradeHours: 24, dryHours: 6, near: 1.2 };
+function centerSeries(all) {
+  const out = [], trades = []; let c = null, prev = null, prevTs = null;
+  for (const p of all) {
+    const v = p.v;
+    if (v && v !== prev && v.volume > 0 && v.price != null) trades.push([p.ts, v.price]); // v is the same object while nothing new was reported, so a carried trade counts once
+    prev = v;
+    const recent = trades.filter((x) => x[0] > p.ts - CENTER.tradeHours * 3600), mean = recent.length ? recent.reduce((s, x) => s + x[1], 0) / recent.length : null;
+    let tg = mean;
+    if (!recent.length || trades[trades.length - 1][0] <= p.ts - CENTER.dryHours * 3600) { // no trade for a while: the quotes decide
+      const base = c ?? (v ? (v.ask ?? v.bid) : null);
+      const q = v && base != null ? [v.ask, v.bid].filter((x) => x != null && x >= base / CENTER.near && x <= base * CENTER.near) : [];
+      if (q.length) tg = q.reduce((s, x) => s + x, 0) / q.length;
+    }
+    if (tg != null) {
+      const cap = Math.pow(CENTER.capPerHour, Math.max(1, (p.ts - (prevTs ?? p.ts)) / 3600));
+      c = c == null ? tg : Math.min(Math.max(tg, c / cap), c * cap);
+    }
+    prevTs = p.ts;
+    out.push(v ? c : null);
+  }
+  return out;
+}
+const rangeAround = (c) => { const half = Math.max(0.1 * c, 2 * priceStep(c)); return [gridNear(c - half), gridUp(c + half)]; };
+
+/* Estimated tradeable range at every point of a history (+-10% or 2 steps around centerSeries).  Returns {lo, hi}, null where there is no center. */
 function rangeSeries(all) {
   const lo = [], hi = [];
-  all.forEach((p, i) => {
-    const v = p.v;
-    if (!v) { lo.push(null); hi.push(null); return; }
-    const t = tPick(all.slice(Math.max(0, i - 11), i + 1).map((q) => (q.v && q.v.volume > 0 ? q.v.price : null)));
-    const ask = v.ask != null && v.ask > 0 ? v.ask : null;
-    let ref = ask != null ? ask : t;
-    if (t != null && ask != null && (ask > 1.1 * t || ask < 0.9 * t)) ref = t;
-    if (ref == null) { lo.push(null); hi.push(null); return; }
-    const half = Math.max(0.1 * ref, 2 * priceStep(ref));
-    lo.push(gridNear(ref - half)); hi.push(gridUp(ref + half));
-  });
+  for (const c of centerSeries(all)) {
+    if (c == null) { lo.push(null); hi.push(null); } else { const [l, h] = rangeAround(c); lo.push(l); hi.push(h); }
+  }
   return { lo, hi };
 }
 
@@ -973,11 +992,9 @@ function tradeRows() {
     if (!last) continue;
     let traded = 0;
     for (const v of w) if (v && v.volume > 0 && v.price != null) traded++;
-    const rec = w.slice(-12), t = tPick(rec.map((v) => (v && v.volume > 0 ? v.price : null)));       // typical recent trade price
-    let ref = last.ask != null ? last.ask : t;                                                          // estimated center of the range
-    if (t != null && last.ask != null && (last.ask > 1.1 * t || last.ask < 0.9 * t)) ref = t;           // an ask far from recent trades is probably out of range itself
+    const ref = centerSeries(pts)[n - 1];                                                               // estimated center of the range
     if (ref == null) continue;
-    const half = Math.max(0.1 * ref, 2 * priceStep(ref)), lo = gridNear(ref - half), hi = gridUp(ref + half);
+    const [lo, hi] = rangeAround(ref);
     const inR = (q) => q != null && q >= lo * (1 - TOL) && q <= hi * (1 + TOL);
     const bidIn = inR(last.bid) ? last.bid : null, askIn = inR(last.ask) ? last.ask : null;
     const B = bidIn != null ? Math.min(tickUp(bidIn), hi) : lo, A = askIn != null ? Math.max(tickDown(askIn), lo) : hi;
