@@ -76,7 +76,9 @@ td.name button:hover { text-decoration: underline; }
 td.star button { background: none; border: 0; cursor: pointer; font-size: 16px; color: var(--muted); line-height: 1; }
 td.star button[aria-pressed="true"] { color: var(--ink); }
 .up { color: var(--up); } .down { color: var(--down); } .flat { color: var(--muted); }
-.tablewrap { overflow-x: auto; max-height: 70vh; overflow-y: auto; }
+.sticky-head { position: fixed; top: 0; z-index: 5; overflow: hidden; display: none; background: var(--surface); border-bottom: 1px solid var(--grid); box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+.sticky-head table { table-layout: fixed; width: auto; }
+.tablewrap { overflow-x: auto; } /* sideways scroll only; no max-height, so the page itself scrolls vertically */
 .charthead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 6px; }
 .charthead h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); }
@@ -134,7 +136,9 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
   #i-filters select, #i-filters input { min-width: 0; width: 100%; padding: 6px; font-size: 13px; }
   #i-filters .btn { white-space: nowrap; flex: none; padding: 6px 8px; }
 }
-@media (max-width: 640px) { body { padding: 0 10px 40px; } .filters label { flex: 1 1 140px; } }
+@media (max-width: 640px) { body { padding: 0 10px 40px; } .filters label { flex: 1 1 140px; }
+  .card { padding: 10px 6px; } table { font-size: 11px; } th, td { padding: 5px 3px; white-space: normal; } th:first-child, td.star { width: auto; }
+}
 </style>
 </head>
 <body>
@@ -156,7 +160,9 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
 
 <main id="app" class="hidden">
   <div class="tabs" role="tablist">
-    <button class="tab" role="tab" id="tab-trade" aria-selected="true">Trade</button>
+    <button class="tab" role="tab" id="tab-trade" aria-selected="true">Spread</button>
+    <button class="tab" role="tab" id="tab-buy" aria-selected="false">Buy</button>
+    <button class="tab" role="tab" id="tab-sell" aria-selected="false">Sell</button>
     <button class="tab" role="tab" id="tab-item" aria-selected="false">Item</button>
     <button class="tab" role="tab" id="tab-craft" aria-selected="false">Crafting</button>
     <button class="tab" role="tab" id="tab-watch" aria-selected="false">Watchlist</button>
@@ -204,6 +210,22 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
       <label title="Find an item by name. While a search is typed, items are listed even if they fail the margin and hours filters">Search <input id="t-search" type="search" placeholder="item name"></label>
     </div>
     <div class="card"><div class="tablewrap"><table id="trade"><thead></thead><tbody></tbody></table></div></div>
+  </section>
+
+  <section id="p-buy" class="hidden">
+    <div class="filters">
+      <label>Search <input id="x-search" type="search" placeholder="item name"></label>
+    </div>
+    <div id="x-note"></div>
+    <div class="card"><div class="tablewrap"><table id="ext-buy"><thead></thead><tbody></tbody></table></div></div>
+  </section>
+
+  <section id="p-sell" class="hidden">
+    <div class="filters">
+      <label>Search <input id="y-search" type="search" placeholder="item name"></label>
+    </div>
+    <div id="y-note"></div>
+    <div class="card"><div class="tablewrap"><table id="ext-sell"><thead></thead><tbody></tbody></table></div></div>
   </section>
 
   <section id="p-watch" class="hidden">
@@ -938,6 +960,7 @@ const tickDown = (p) => p - priceStep(Math.max(1, p - 1)); // next price below p
 const MIN_MARGIN = 0.05, MIN_HOURS = 0.5; // fixed filters: net margin at least 5%, traded in at least half of the last 24 hours
 UI.trade = { sort: { key: "margin", dir: -1 }, search: "" };
 
+const THIN_TRADES = 5; // fewer trade reports than this in the history: the game uses a wider range for items whose price is still being established (exact width unknown)
 const TOL = 0.015; // the center is only known to about this accuracy
 const gridNear = (p) => { const st = priceStep(p); return Math.round(p / st) * st; };
 const gridUp = (p) => { const st = priceStep(p); return Math.ceil(p / st) * st; };
@@ -992,13 +1015,18 @@ function tradeRows() {
     if (!last) continue;
     let traded = 0;
     for (const v of w) if (v && v.volume > 0 && v.price != null) traded++;
+    let seen = 0, pv = null; // distinct trade reports in the whole history; few = the price is probably still being established
+    for (const p of pts) { if (p.v && p.v !== pv && p.v.volume > 0 && p.v.price != null) seen++; pv = p.v; }
     const ref = centerSeries(pts)[n - 1];                                                               // estimated center of the range
     if (ref == null) continue;
     const [lo, hi] = rangeAround(ref);
     const inR = (q) => q != null && q >= lo * (1 - TOL) && q <= hi * (1 + TOL);
-    const bidIn = inR(last.bid) ? last.bid : null, askIn = inR(last.ask) ? last.ask : null;
+    // a buy above the max is held at the max edge and a sell below the min at the min edge (game changelog), so they are queue competition there;
+    // a bid below the range or an ask above it cannot fill and is ignored
+    const bidOver = last.bid != null && last.bid > hi * (1 + TOL), askUnder = last.ask != null && last.ask < lo * (1 - TOL);
+    const bidIn = bidOver ? hi : inR(last.bid) ? last.bid : null, askIn = askUnder ? lo : inR(last.ask) ? last.ask : null;
     const B = bidIn != null ? Math.min(tickUp(bidIn), hi) : lo, A = askIn != null ? Math.max(tickDown(askIn), lo) : hi;
-    out.push({ iid, name: D.items.get(iid).name, B, A, lo, hi, noBid: bidIn == null, noAsk: askIn == null, queue: bidIn == null || askIn == null, crossed: B >= A, // crossed: no room between the two prices; only shown by a search
+    out.push({ iid, name: D.items.get(iid).name, B, A, lo, hi, noBid: bidIn == null, noAsk: askIn == null, bidOver, askUnder, thin: seen < THIN_TRADES, queue: bidIn == null || askIn == null, crossed: B >= A, // crossed: no room between the two prices; only shown by a search
       margin: (TAXKEEP * A - B) / B, spread: ((A - B) / B) * 100,
       hours: traded / W });
   }
@@ -1010,7 +1038,6 @@ const TRADE_COLS = [
   { k: "B", label: "Bid for", tip: "Price to post a buy order at: the best bid plus one grid step" },
   { k: "A", label: "Ask for", tip: "Price to post a sell order at: the best ask minus one grid step" },
   { k: "margin", label: "Net margin", tip: "(96% of the ask for - bid for) / bid for: profit of one round trip at today's quotes inside the range, after the 4% tax. With no competition on a side it uses the range edge, so it is the most you could set." },
-  { k: "lo", label: "Range", tip: "Estimated tradeable range (about +-10% around the best ask, bounds on the price grid). A green low bound means no bid inside the range, a green high bound no ask: nobody ahead of you in the queue on that side (Bid for / Ask for then sit at that bound, the best margin you could set)." },
   { k: "spread", label: "Spread", tip: "Ask for minus bid for, as a percentage of bid for" },
   { k: "hours", label: "Hours traded", tip: "Share of the last 24 hours in which the item traded at all" },
 ];
@@ -1043,15 +1070,103 @@ function renderTrade() {
   for (const r of list.slice(0, 300)) {
     const nm = el("button", { text: r.name }); nm.addEventListener("click", () => openItem(r.iid, 0));
     tb.append(el("tr", {},
-      el("td", { class: "name" }, nm), el("td", { text: full(r.B) }), el("td", { text: full(r.A) }),
+      el("td", { class: "name" }, nm, r.thin ? el("span", { class: "flat", title: "few trades on record: the game may use a wider tradeable range than the one assumed here", text: " ~" }) : ""), el("td", { text: full(r.B) }), el("td", { text: full(r.A) }),
       el("td", { class: sg(r.margin), text: pctTxt(r.margin) }),
-      el("td", {}, el("span", { class: r.noBid ? "nocomp" : "", title: r.noBid ? "no bid inside the range" : "", text: fmt(r.lo) }), " – ",
-        el("span", { class: r.noAsk ? "nocomp" : "", title: r.noAsk ? "no ask inside the range" : "", text: fmt(r.hi) })),
       el("td", { text: r.spread.toFixed(1) + "%" }), el("td", { text: Math.round(r.hours * 100) + "%" })));
   }
   if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(TRADE_COLS.length), class: "empty", text: q ? "No item with a two-sided book matches this search." : "Nothing has a net margin of at least 5% and trades in at least half of the hours." })));
 }
 const pctTxt = (x, d = 1) => (x == null ? "—" : (x * 100).toFixed(d) + "%");
+
+// ------------------------------------------------------------------ buy / sell: items at their low / high
+/* Buy lists items whose ask is at its lowest, Sell items whose bid is at its highest, each labelled with the longest window (24 h ... 90 d, all history) in which that holds,
+   like a "new 3-month low" screen: no window to pick, a longer window means a more significant extreme.  Only quotes inside the estimated tradeable range
+   count (rangeSeries), so a stale bid at 30% of the price or a 1T placeholder ask never makes a fake low or high.  "At" means within 1% of the window extreme.  Items whose price moved less than MIN_SWING over the window are left out: a flat price is always "at its low". */
+const MIN_SWING = 0.05;
+UI.ext = { buy: { sort: { key: "span", dir: -1 }, search: "" }, sell: { sort: { key: "span", dir: -1 }, search: "" } };
+const extCache = new Map(); // item id -> { ts[], ask[], bid[], traded } with quotes outside the range removed (null); rebuilt for every new latest snapshot
+let extFor = null;
+function extSeries() {
+  if (extFor !== D.latest.id) { extCache.clear(); extFor = D.latest.id; }
+  if (extCache.size) return extCache;
+  for (const key of stateAt(D.latest.id).keys()) {
+    const [iid, lvl] = key.split("|").map(Number);
+    if (lvl !== 0) continue;
+    const pts = history(iid, 0), rg = rangeSeries(pts), ts = [], ask = [], bid = [];
+    pts.forEach((p, i) => {
+      const v = p.v, lo = rg.lo[i], hi = rg.hi[i], ok = (q) => q != null && lo != null && q >= lo * (1 - TOL) && q <= hi * (1 + TOL);
+      ts.push(p.ts); ask.push(v && ok(v.ask) ? v.ask : null); bid.push(v && ok(v.bid) ? v.bid : null);
+    });
+    const n = pts.length, W = Math.min(24, n); let traded = 0, pv = null;
+    for (let i = n - W; i < n; i++) { const v = pts[i].v; if (v && v.volume > 0 && v.price != null) traded++; }
+    extCache.set(iid, { ts, ask, bid, traded: W ? traded / W : 0 });
+  }
+  return extCache;
+}
+
+const EXT_SPANS = [["24 h", 86400], ["3 d", 3 * 86400], ["7 d", 7 * 86400], ["14 d", 14 * 86400], ["30 d", 30 * 86400], ["90 d", 90 * 86400]];
+const EXT_TOL = 0.01, EXT_MIN_SPAN = 86400; // "at" the extreme = within 1%; items must be at it for at least the shortest span to be listed
+function extSpans() { // the windows that fit in the history, plus the whole history when it is longer than the last of them
+  const have = D.latest.ts - D.snaps[0].ts, sp = EXT_SPANS.filter((x) => x[1] <= have);
+  if (!sp.length || have > sp[sp.length - 1][1] * 1.1) sp.push([ago(have) + " (all)", have]);
+  return sp;
+}
+const median = (a) => { const v = [...a].sort((x, y) => x - y), m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
+function extRows(kind) {
+  const buy = kind === "buy", spans = extSpans(), out = [];
+  for (const [iid, e] of extSeries()) {
+    const arr = buy ? e.ask : e.bid, n = arr.length, now = arr[n - 1];
+    if (now == null) continue;
+    let best = null;
+    for (const [label, secs] of spans) { // ascending: keep the longest window in which the price is at its extreme
+      const since = D.latest.ts - secs; let mn = Infinity, mx = -Infinity;
+      for (let i = 0; i < n; i++) if (e.ts[i] >= since && arr[i] != null) { if (arr[i] < mn) mn = arr[i]; if (arr[i] > mx) mx = arr[i]; }
+      if (!(mx > mn) || mx / mn - 1 < MIN_SWING) continue;
+      if (buy ? now <= mn * (1 + EXT_TOL) : now >= mx * (1 - EXT_TOL)) best = { label, secs, mn, mx, since, med: median(arr.filter((q, i) => q != null && e.ts[i] >= since)) };
+    }
+    if (!best || best.secs < Math.min(EXT_MIN_SPAN, spans[0][1])) continue;
+    out.push({ iid, name: D.items.get(iid).name, now, mn: best.mn, mx: best.mx, span: best.secs, label: best.label, swing: best.mx / best.mn - 1, hours: e.traded, med: best.med, vsMed: now / best.med - 1 });
+  }
+  return out;
+}
+
+function renderExtreme(kind) {
+  const buy = kind === "buy", c = UI.ext[kind], s = c.sort, pre = buy ? "x" : "y";
+  const q = c.search.trim().toLowerCase();
+  const list = extRows(kind).filter((r) => (q ? r.name.toLowerCase().includes(q) : r.hours > 0));
+  const cols = [
+    { k: "name", label: "Item", tip: "" },
+    { k: "span", label: buy ? "Lowest in" : "Highest in", tip: "The longest window (24 h, 3 d, 7 d, 14 d, 30 d, 90 d, or all history) in which the price is at its extreme, within 1%. Longer = more significant." },
+    { k: "now", label: buy ? "Ask now" : "Bid now", tip: buy ? "Best ask inside the estimated range: what you would pay now" : "Best bid inside the estimated range: what you would get now" },
+    { k: "vsMed", label: "vs median", tip: (buy ? "How far the ask is below" : "How far the bid is above") + " its median over that window: the size of the opportunity against the normal price" },
+    { k: "hours", label: "Hours traded", tip: "Share of the last 24 hours in which the item traded at all" },
+  ];
+  list.sort((a, b) => {
+    const x = a[s.key], y = b[s.key];
+    return (typeof x === "string" ? x.localeCompare(y) : x - y) * s.dir || b.swing - a.swing; // ties: bigger swing first
+  });
+  $(pre + "-note").replaceChildren(D.latest.ts - D.snaps[0].ts < 7 * 86400 ? el("p", { class: "note", text: `Only ${ago(D.latest.ts - D.snaps[0].ts)} of history so far; longer windows appear as it builds up.` }) : "");
+  const table = $("ext-" + kind), thead = table.tHead; thead.replaceChildren();
+  const tr = el("tr");
+  for (const col of cols) {
+    const th = el("th", { scope: "col", title: col.tip });
+    if (s.key === col.k) th.setAttribute("aria-sort", s.dir > 0 ? "ascending" : "descending");
+    const b = el("button", { text: col.label + (s.key === col.k ? (s.dir > 0 ? " ↑" : " ↓") : "") });
+    b.addEventListener("click", () => { c.sort = s.key === col.k ? { key: col.k, dir: -s.dir } : { key: col.k, dir: col.k === "name" ? 1 : -1 }; renderExtreme(kind); });
+    th.append(b); tr.append(th);
+  }
+  thead.append(tr);
+  const tb = table.tBodies[0]; tb.replaceChildren();
+  for (const r of list.slice(0, 300)) {
+    const nm = el("button", { text: r.name }); nm.addEventListener("click", () => openItem(r.iid, 0));
+    tb.append(el("tr", {}, el("td", { class: "name" }, nm), el("td", { text: r.label }), el("td", { text: full(r.now) }),
+      el("td", { class: buy ? "down" : "up", text: pctTxt(r.vsMed) }), el("td", { text: Math.round(r.hours * 100) + "%" })));
+  }
+  if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(cols.length), class: "empty", text: q ? "No item matches this search." : `No item is at its ${buy ? "low" : "high"} for this window.` })));
+}
+for (const [pre, kind] of [["x", "buy"], ["y", "sell"]]) {
+  $(pre + "-search").addEventListener("input", (e) => { UI.ext[kind].search = e.target.value; renderExtreme(kind); });
+}
 
 // ------------------------------------------------------------------ craft cost
 /* What it costs to buy the ingredients of an item, at every snapshot, from the recipes in item_recipe
@@ -1249,18 +1364,52 @@ function renderWatch() {
 }
 
 // ------------------------------------------------------------------ tabs, filters, loading
+const TABS = ["trade", "buy", "sell", "item", "craft", "watch", "settings"];
 function setTab(tab) {
   UI.tab = tab;
-  for (const t of ["trade", "item", "craft", "watch", "settings"]) {
+  for (const t of TABS) {
     $("tab-" + t).setAttribute("aria-selected", String(t === tab));
     $("p-" + t).classList.toggle("hidden", t !== tab);
   }
   $("filters").classList.toggle("hidden", tab !== "watch"); // only the watchlist compares with an earlier snapshot
   render();
 }
+// ------------------------------------------------------------------ sticky table headers
+/* A table that scrolls sideways cannot use CSS "position: sticky" for its header (the scrolling box becomes the sticky container), so each .tablewrap gets a
+   fixed copy of its header that appears while the real header is above the top of the screen, shifted along with the sideways scroll.  Clicking the copy clicks the real header. */
+const stickies = new Map(); // .tablewrap -> { box, table, sig }
+function syncSticky(wrap) {
+  let st = stickies.get(wrap);
+  const table = wrap.querySelector("table"), head = table && table.tHead && table.tHead.rows[0];
+  const hide = () => { if (st) st.box.style.display = "none"; };
+  if (!head || !wrap.offsetParent) return hide();
+  const wr = wrap.getBoundingClientRect(), hh = head.getBoundingClientRect().height;
+  if (wr.top >= 0 || wr.bottom < hh + 40) return hide();
+  if (!st) {
+    const box = el("div", { class: "sticky-head", "aria-hidden": "true" }), t = el("table");
+    box.append(t); document.body.append(box);
+    box.addEventListener("click", (e) => { const th = e.target.closest("th"); if (th) head.cells[[...th.parentNode.children].indexOf(th)]?.querySelector("button")?.click(); });
+    st = { box, table: t, sig: "" }; stickies.set(wrap, st);
+  }
+  const cells = [...head.cells], sig = cells.map((c) => c.textContent + c.offsetWidth + (c.getAttribute("aria-sort") || "")).join("|") + table.offsetWidth;
+  if (sig !== st.sig) { // header changed (sorted, resized, re-rendered): rebuild the copy
+    st.sig = sig;
+    const tr = head.cloneNode(true); [...tr.cells].forEach((c, i) => { c.style.width = cells[i].offsetWidth + "px"; c.style.boxSizing = "border-box"; });
+    st.table.style.width = table.offsetWidth + "px"; st.table.replaceChildren(el("thead", {}, tr));
+    for (const b of st.table.querySelectorAll("button")) b.tabIndex = -1;
+  }
+  st.box.style.display = "block"; st.box.style.left = wr.left + "px"; st.box.style.width = wrap.clientWidth + "px";
+  st.table.style.transform = `translateX(${-wrap.scrollLeft}px)`;
+}
+let stickyRaf = 0;
+const syncStickies = () => { cancelAnimationFrame(stickyRaf); stickyRaf = requestAnimationFrame(() => document.querySelectorAll(".tablewrap").forEach(syncSticky)); };
+window.addEventListener("scroll", syncStickies, { passive: true }); window.addEventListener("resize", syncStickies);
+document.addEventListener("scroll", (e) => { if (e.target.classList && e.target.classList.contains("tablewrap")) syncStickies(); }, { capture: true, passive: true });
+
 function render() {
   if (!db) return;
-  if (UI.tab === "item") renderItem(); else if (UI.tab === "craft") renderCraft(); else if (UI.tab === "trade") renderTrade(); else if (UI.tab === "settings") syncSkillBoxes(); else renderWatch();
+  if (UI.tab === "item") renderItem(); else if (UI.tab === "craft") renderCraft(); else if (UI.tab === "trade") renderTrade(); else if (UI.tab === "buy" || UI.tab === "sell") renderExtreme(UI.tab); else if (UI.tab === "settings") syncSkillBoxes(); else renderWatch();
+  syncStickies();
 }
 
 function afterLoad() {
@@ -1297,7 +1446,7 @@ dz.addEventListener("drop", async (e) => { e.preventDefault(); dz.classList.remo
 document.addEventListener("dragover", (e) => e.preventDefault());
 document.addEventListener("drop", async (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) loadBytes(await f.arrayBuffer(), f.name); });
 
-for (const t of ["trade", "item", "craft", "watch", "settings"]) $("tab-" + t).addEventListener("click", () => setTab(t));
+for (const t of TABS) $("tab-" + t).addEventListener("click", () => setTab(t));
 buildSettings(); // after everything above is defined
 $("f-window").addEventListener("change", (e) => { UI.windowId = e.target.value; store.set("mw.window", UI.windowId); render(); });
 const pickItem = (e) => { const it = D.byName.get(e.target.value); if (it && (it.id !== UI.item || e.type === "change")) { UI.item = it.id; UI.itemLevel = 0; renderItem(); } };
@@ -1306,7 +1455,8 @@ $("i-search").addEventListener("input", pickItem); // Firefox fires "change" on 
 $("i-level").addEventListener("change", (e) => { UI.itemLevel = +e.target.value; renderItem(); });
 $("i-star").addEventListener("click", () => { if (UI.item == null) return; toggleWatch(UI.item + "|" + UI.itemLevel); renderItem(); });
 $("i-hour").addEventListener("input", (e) => { const v = parseFloat(e.target.value); UI.hour = v >= 0 ? v * 1e6 : 0; renderItem(); });
-let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (UI.tab === "item") renderItem(); }, 150); });
+let rz, rw = window.innerWidth; // phones fire "resize" while scrolling (the address bar hides), which would redraw the Item tab and jump to the top: redraw only when the width changes
+window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (UI.tab === "item" && window.innerWidth !== rw) { rw = window.innerWidth; renderItem(); } }, 150); });
 
 // theme toggle: auto -> light -> dark
 const themes = ["auto", "light", "dark"];
