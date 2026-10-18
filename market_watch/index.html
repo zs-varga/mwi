@@ -6,29 +6,6 @@
 <title>Market Watch</title>
 <style>
 :root {
-  color-scheme: light;
-  --page: #f9f9f7; --surface: #fcfcfb;
-  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
-  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10); --wash: rgba(11,11,11,.05);
-  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
-  --up: #006300; --down: #d03b3b; --accent: #2a78d6;
-  --buy: #008300; --sell: #e34948;
-  --cost1: #8250df; --cost2: #b07d00;
-}
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) {
-    color-scheme: dark;
-    --page: #0d0d0d; --surface: #1a1a19;
-    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
-    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10); --wash: rgba(255,255,255,.06);
-    --s1: #3987e5; --s2: #d95926; --s3: #199e70;
-    --up: #0ca30c; --down: #d03b3b; --accent: #3987e5;
-    --buy: #008300; --sell: #e66767;
-    --cost1: #a98bf5; --cost2: #e3b341;
-  }
-}
-:root[data-theme="dark"] {
-  --cost1: #a98bf5; --cost2: #e3b341;
   color-scheme: dark;
   --page: #0d0d0d; --surface: #1a1a19;
   --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
@@ -36,6 +13,7 @@
   --s1: #3987e5; --s2: #d95926; --s3: #199e70;
   --up: #0ca30c; --down: #d03b3b; --accent: #3987e5;
   --buy: #008300; --sell: #e66767;
+  --cost1: #a98bf5; --cost2: #e3b341;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--page); color: var(--ink);
@@ -52,6 +30,7 @@ button, select, input { font: inherit; color: var(--ink); }
 .btn:focus-visible, select:focus-visible, input:focus-visible, th button:focus-visible, td button:focus-visible, svg:focus-visible
   { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--grid); margin: 8px 0 14px; }
+#tab-watch { margin-left: auto; } /* Watchlist and Settings sit at the right edge */
 .tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 14px; cursor: pointer; color: var(--ink-2); }
 .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
 .filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; margin-bottom: 12px; }
@@ -61,6 +40,9 @@ button, select, input { font: inherit; color: var(--ink); }
 .seg button { background: var(--surface); border: 0; padding: 6px 12px; cursor: pointer; border-right: 1px solid var(--border); }
 .seg button:last-child { border-right: 0; }
 .seg button[aria-pressed="true"] { background: var(--wash); font-weight: 600; }
+.catf .seg { flex-wrap: wrap; }
+.catf .seg button { background: color-mix(in srgb, var(--surface), #000 22%); color: color-mix(in srgb, var(--muted), var(--surface) 45%); }
+.catf .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink-2); font-weight: 400; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
 .summary { color: var(--ink-2); font-size: 13px; margin: 0 0 10px; }
 .note { color: var(--ink-2); font-size: 13px; background: var(--wash); border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; }
@@ -146,14 +128,12 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
 <header>
   <h1>Market Watch</h1>
   <div class="meta" id="meta">No data loaded.</div>
-  <button class="btn" id="open">Open data file…</button>
-  <button class="btn" id="theme" title="Switch between automatic, light and dark">Theme: auto</button>
-  <input type="file" id="file" accept=".db,.gz,.sqlite" class="hidden">
+  <button class="btn" id="refresh" title="Read the data file again">Refresh</button>
 </header>
 
 <div id="load" class="drop">
   <p><strong>Load the market history database</strong></p>
-  <p>Drop <code>market.db.gz</code> (or <code>market.db</code>) here, or use “Open data file…”.<br>
+  <p>Drop <code>market.db.gz</code> (or <code>market.db</code>) here.<br>
   If this page is served from the folder that holds the file, it loads automatically.</p>
   <p id="loaderr" style="color:var(--down)"></p>
 </div>
@@ -194,6 +174,7 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
   <section id="p-craft" class="hidden">
     <div class="filters" id="c-filters">
       <label>Search <input id="c-search" type="search" placeholder="item name"></label>
+      <div class="catf"></div>
       <div><div style="font-size:12px;color:var(--ink-2);margin-bottom:3px">Craft</div>
         <div class="seg" role="group" aria-label="Craft" id="c-mode">
           <button data-m="1" aria-pressed="true" title="Buy the direct ingredients, craft the last step">1 step</button>
@@ -208,6 +189,7 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
     <div id="t-note"></div>
     <div class="filters" id="t-filters">
       <label title="Find an item by name. While a search is typed, items are listed even if they fail the margin and hours filters">Search <input id="t-search" type="search" placeholder="item name"></label>
+      <div class="catf"></div>
     </div>
     <div class="card"><div class="tablewrap"><table id="trade"><thead></thead><tbody></tbody></table></div></div>
   </section>
@@ -215,6 +197,7 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
   <section id="p-buy" class="hidden">
     <div class="filters">
       <label>Search <input id="x-search" type="search" placeholder="item name"></label>
+      <div class="catf"></div>
     </div>
     <div id="x-note"></div>
     <div class="card"><div class="tablewrap"><table id="ext-buy"><thead></thead><tbody></tbody></table></div></div>
@@ -223,6 +206,7 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
   <section id="p-sell" class="hidden">
     <div class="filters">
       <label>Search <input id="y-search" type="search" placeholder="item name"></label>
+      <div class="catf"></div>
     </div>
     <div id="y-note"></div>
     <div class="card"><div class="tablewrap"><table id="ext-sell"><thead></thead><tbody></tbody></table></div></div>
@@ -290,7 +274,7 @@ function deltaNode(p) {
 
 // ------------------------------------------------------------------ data layer
 let SQL = null, db = null;
-const D = { snaps: [], items: new Map(), byName: new Map(), levels: [], names: [], latest: null };
+const D = { cat: new Map(), snaps: [], items: new Map(), byName: new Map(), levels: [], names: [], latest: null };
 
 function rows(sql, params = []) {
   const st = db.prepare(sql); st.bind(params);
@@ -308,6 +292,11 @@ async function openDb(bytes) {
   if (!D.snaps.length) throw new Error("The database has no snapshots.");
   D.items = new Map(rows("SELECT item_id, hrid FROM item").map(([id, h]) => [id, { id, hrid: h, name: pretty(h) }]));
   D.byName = new Map([...D.items.values()].map((i) => [i.name, i]));
+  D.cat = new Map(); // item id -> game category (resource, food, drink, equipment, ...); empty when the database predates the item_category table
+  if (rows("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'item_category'").length) {
+    const byHrid = new Map([...D.items.values()].map((i) => [i.hrid, i.id]));
+    for (const [h, c] of rows("SELECT item_hrid, category FROM item_category")) if (byHrid.has(h)) D.cat.set(byHrid.get(h), c);
+  }
   D.levels = rows("SELECT DISTINCT level FROM obs ORDER BY level").map((r) => r[0]);
   D.latest = D.snaps[D.snaps.length - 1];
   stateCache.clear(); histCache.clear(); costCache.clear(); hasDepth = null; craftSet = null; craftSecs = null; recipes = null; dropTab = null; lootTab = null; drinkTab = null;
@@ -890,18 +879,15 @@ function craftData() {
   return list;
 }
 const CRAFT_COLS = [
-  { k: "name", label: "Item", tip: "" }, { k: "rev", label: "Revenue", tip: "Bid minus the 4% tax, plus the expected value of the essence and rare drops (also after tax; see Drops)" },
-  { k: "drops", label: "Drops", tip: "Of the revenue: the expected essence and rare drops per item, at the bid minus the tax, with the essence and rare find from the Settings tab. Crates are valued by their contents" },
-  { k: "cost", label: "Cost", tip: "Materials at ask, plus the drinks of the Settings tab (by crafting time)" },
+  { k: "name", label: "Item", tip: "" }, { k: "rev", label: "Revenue", tip: "Bid minus the 4% tax, plus the expected value of the essence and rare drops (also after tax)" },
   { k: "profit", label: "Profit", tip: "Revenue minus cost, per item" }, { k: "margin", label: "Margin", tip: "Profit as a percentage of the cost" },
-  { k: "perHour", label: "Per hour", tip: "(Revenue minus materials and drinks) per crafting hour" }, { k: "secs", label: "Time", tip: "Crafting time per item, real time with speed and efficiency" },
-  { k: "units", label: "Units/h", tip: "Units traded in the last hour" },
+  { k: "perHour", label: "Per hour", tip: "(Revenue minus materials and drinks) per crafting hour" },
 ];
 function renderCraft() {
   const all = craftData(), c = UI.craft;
   if (!all) { $("c-summary").textContent = "This database has no recipe tables yet."; $("craft").tHead.replaceChildren(); $("craft").tBodies[0].replaceChildren(); return; }
   const q = c.search.trim().toLowerCase();
-  const list = all.filter((r) => (q ? r.name.toLowerCase().includes(q) : r.profit > 0)); // profitable items, or whatever matches the search
+  const list = all.filter((r) => catOk(r.id) && (q ? r.name.toLowerCase().includes(q) : r.profit > 0)); // profitable items, or whatever matches the search
   const s = c.sort;
   list.sort((a, b) => {
     const x = a[s.key], y = b[s.key];
@@ -925,11 +911,11 @@ function renderCraft() {
   const sign = (v) => (v > 0 ? "up" : v < 0 ? "down" : "");
   for (const r of list) {
     const nm = el("button", { text: r.name }); nm.addEventListener("click", () => openItem(r.id, 0));
-    tb.append(el("tr", {}, el("td", { class: "name" }, nm), el("td", { text: fmt(r.rev) }), el("td", { text: fmt(r.drops) }), el("td", { text: fmt(r.cost) }),
+    tb.append(el("tr", {}, el("td", { class: "name" }, nm), el("td", { text: fmt(r.rev) }),
       el("td", { class: sign(r.profit), text: fmt(r.profit) }), el("td", { class: sign(r.margin), text: r.margin == null ? "—" : r.margin.toFixed(r.margin < 10 ? 1 : 0) + "%" }),
-      el("td", { class: sign(r.perHour), text: r.perHour == null ? "—" : fmt(r.perHour) }), el("td", { text: r.secs == null ? "—" : fmtDur(r.secs) }), el("td", { text: full(r.units) })));
+      el("td", { class: sign(r.perHour), text: r.perHour == null ? "—" : fmt(r.perHour) })));
   }
-  if (!list.length) tb.append(el("tr", {}, el("td", { colspan: "9", class: "empty", text: "No items match these filters." })));
+  if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(CRAFT_COLS.length), class: "empty", text: "No items match these filters." })));
 }
 for (const b of $("c-mode").children) b.addEventListener("click", () => { UI.craft.mode = b.dataset.m; renderCraft(); });
 $("c-search").addEventListener("input", (e) => { UI.craft.search = e.target.value; renderCraft(); });
@@ -957,7 +943,6 @@ function priceStep(p) {
 const tickUp = (p) => p + priceStep(p);                  // next price above p
 const tickDown = (p) => p - priceStep(Math.max(1, p - 1)); // next price below p (1200 -> 1196, 1205 -> 1200)
 
-const MIN_MARGIN = 0.05, MIN_HOURS = 0.5; // fixed filters: net margin at least 5%, traded in at least half of the last 24 hours
 UI.trade = { sort: { key: "margin", dir: -1 }, search: "" };
 
 const THIN_TRADES = 5; // fewer trade reports than this in the history: the game uses a wider range for items whose price is still being established (exact width unknown)
@@ -1038,7 +1023,6 @@ const TRADE_COLS = [
   { k: "B", label: "Bid for", tip: "Price to post a buy order at: the best bid plus one grid step" },
   { k: "A", label: "Ask for", tip: "Price to post a sell order at: the best ask minus one grid step" },
   { k: "margin", label: "Net margin", tip: "(96% of the ask for - bid for) / bid for: profit of one round trip at today's quotes inside the range, after the 4% tax. With no competition on a side it uses the range edge, so it is the most you could set." },
-  { k: "spread", label: "Spread", tip: "Ask for minus bid for, as a percentage of bid for" },
   { k: "hours", label: "Hours traded", tip: "Share of the last 24 hours in which the item traded at all" },
 ];
 
@@ -1046,7 +1030,7 @@ function renderTrade() {
   const c = UI.trade, s = c.sort;
   const all = tradeRows();
   const q = c.search.trim().toLowerCase();
-  const list = all.filter((r) => (q ? r.name.toLowerCase().includes(q) : !r.crossed && r.margin >= MIN_MARGIN && r.hours >= MIN_HOURS)); // a search lists matching items whatever their margin and hours
+  const list = all.filter((r) => catOk(r.iid) && (!q || r.name.toLowerCase().includes(q))); // no thresholds: every item with a two-sided book; the table is cut to the row limit after sorting
   list.sort((a, b) => {
     const x = a[s.key], y = b[s.key];
     if (x == null && y == null) return 0;
@@ -1067,14 +1051,14 @@ function renderTrade() {
   thead.append(tr);
   const tb = $("trade").tBodies[0]; tb.replaceChildren();
   const sg = (v) => (v == null ? "flat" : v > 0 ? "up" : v < 0 ? "down" : "flat");
-  for (const r of list.slice(0, 300)) {
+  for (const r of list) {
     const nm = el("button", { text: r.name }); nm.addEventListener("click", () => openItem(r.iid, 0));
     tb.append(el("tr", {},
-      el("td", { class: "name" }, nm, r.thin ? el("span", { class: "flat", title: "few trades on record: the game may use a wider tradeable range than the one assumed here", text: " ~" }) : ""), el("td", { text: full(r.B) }), el("td", { text: full(r.A) }),
+      el("td", { class: "name" }, nm, r.thin ? el("span", { class: "flat", title: "few trades on record: the game may use a wider tradeable range than the one assumed here", "aria-label": "few trades on record", text: " ⚠" }) : ""), el("td", { text: full(r.B) }), el("td", { text: full(r.A) }),
       el("td", { class: sg(r.margin), text: pctTxt(r.margin) }),
-      el("td", { text: r.spread.toFixed(1) + "%" }), el("td", { text: Math.round(r.hours * 100) + "%" })));
+      el("td", { text: Math.round(r.hours * 100) + "%" })));
   }
-  if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(TRADE_COLS.length), class: "empty", text: q ? "No item with a two-sided book matches this search." : "Nothing has a net margin of at least 5% and trades in at least half of the hours." })));
+  if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(TRADE_COLS.length), class: "empty", text: "No item with a two-sided book matches these filters." })));
 }
 const pctTxt = (x, d = 1) => (x == null ? "—" : (x * 100).toFixed(d) + "%");
 
@@ -1083,7 +1067,7 @@ const pctTxt = (x, d = 1) => (x == null ? "—" : (x * 100).toFixed(d) + "%");
    like a "new 3-month low" screen: no window to pick, a longer window means a more significant extreme.  Only quotes inside the estimated tradeable range
    count (rangeSeries), so a stale bid at 30% of the price or a 1T placeholder ask never makes a fake low or high.  "At" means within 1% of the window extreme.  Items whose price moved less than MIN_SWING over the window are left out: a flat price is always "at its low". */
 const MIN_SWING = 0.05;
-UI.ext = { buy: { sort: { key: "span", dir: -1 }, search: "" }, sell: { sort: { key: "span", dir: -1 }, search: "" } };
+UI.ext = { buy: { sort: { key: "vsMed", dir: 1 }, search: "" }, sell: { sort: { key: "vsMed", dir: -1 }, search: "" } }; // biggest gap to the median first, then the longest extreme
 const extCache = new Map(); // item id -> { ts[], ask[], bid[], traded } with quotes outside the range removed (null); rebuilt for every new latest snapshot
 let extFor = null;
 function extSeries() {
@@ -1117,15 +1101,16 @@ function extRows(kind) {
   for (const [iid, e] of extSeries()) {
     const arr = buy ? e.ask : e.bid, n = arr.length, now = arr[n - 1];
     if (now == null) continue;
-    let best = null;
+    let best = null, fb = null;
     for (const [label, secs] of spans) { // ascending: keep the longest window in which the price is at its extreme
       const since = D.latest.ts - secs; let mn = Infinity, mx = -Infinity;
       for (let i = 0; i < n; i++) if (e.ts[i] >= since && arr[i] != null) { if (arr[i] < mn) mn = arr[i]; if (arr[i] > mx) mx = arr[i]; }
+      if (fb == null) fb = { label: "—", secs: 0, mn, mx, med: median(arr.filter((q, i) => q != null && e.ts[i] >= since)) }; // shortest window: what an item that is not at an extreme is compared with
       if (!(mx > mn) || mx / mn - 1 < MIN_SWING) continue;
       if (buy ? now <= mn * (1 + EXT_TOL) : now >= mx * (1 - EXT_TOL)) best = { label, secs, mn, mx, since, med: median(arr.filter((q, i) => q != null && e.ts[i] >= since)) };
     }
-    if (!best || best.secs < Math.min(EXT_MIN_SPAN, spans[0][1])) continue;
-    out.push({ iid, name: D.items.get(iid).name, now, mn: best.mn, mx: best.mx, span: best.secs, label: best.label, swing: best.mx / best.mn - 1, hours: e.traded, med: best.med, vsMed: now / best.med - 1 });
+    if (!best || best.secs < Math.min(EXT_MIN_SPAN, spans[0][1])) best = fb; // not at an extreme: listed with "—" and its gap to the median of the shortest window
+    out.push({ iid, name: D.items.get(iid).name, now, mn: best.mn, mx: best.mx, span: best.secs, label: best.label, swing: best.mx > best.mn ? best.mx / best.mn - 1 : 0, hours: e.traded, med: best.med, vsMed: now / best.med - 1 });
   }
   return out;
 }
@@ -1133,7 +1118,7 @@ function extRows(kind) {
 function renderExtreme(kind) {
   const buy = kind === "buy", c = UI.ext[kind], s = c.sort, pre = buy ? "x" : "y";
   const q = c.search.trim().toLowerCase();
-  const list = extRows(kind).filter((r) => (q ? r.name.toLowerCase().includes(q) : r.hours > 0));
+  const list = extRows(kind).filter((r) => catOk(r.iid) && (!q || r.name.toLowerCase().includes(q)));
   const cols = [
     { k: "name", label: "Item", tip: "" },
     { k: "span", label: buy ? "Lowest in" : "Highest in", tip: "The longest window (24 h, 3 d, 7 d, 14 d, 30 d, 90 d, or all history) in which the price is at its extreme, within 1%. Longer = more significant." },
@@ -1141,10 +1126,9 @@ function renderExtreme(kind) {
     { k: "vsMed", label: "vs median", tip: (buy ? "How far the ask is below" : "How far the bid is above") + " its median over that window: the size of the opportunity against the normal price" },
     { k: "hours", label: "Hours traded", tip: "Share of the last 24 hours in which the item traded at all" },
   ];
-  list.sort((a, b) => {
-    const x = a[s.key], y = b[s.key];
-    return (typeof x === "string" ? x.localeCompare(y) : x - y) * s.dir || b.swing - a.swing; // ties: bigger swing first
-  });
+  const gap = (r) => Math.round(r.vsMed * 1000); // compared as shown (0.1%), so equal-looking gaps fall through to the window length
+  const cmp = (a, b, k, dir) => (k === "vsMed" ? gap(a) - gap(b) : typeof a[k] === "string" ? a[k].localeCompare(b[k]) : a[k] - b[k]) * dir;
+  list.sort((a, b) => cmp(a, b, s.key, s.dir) || (s.key === "vsMed" ? 0 : cmp(a, b, "vsMed", buy ? 1 : -1)) || b.span - a.span || b.swing - a.swing); // then: biggest gap to the median, longest "lowest/highest in" window, bigger swing
   $(pre + "-note").replaceChildren(D.latest.ts - D.snaps[0].ts < 7 * 86400 ? el("p", { class: "note", text: `Only ${ago(D.latest.ts - D.snaps[0].ts)} of history so far; longer windows appear as it builds up.` }) : "");
   const table = $("ext-" + kind), thead = table.tHead; thead.replaceChildren();
   const tr = el("tr");
@@ -1152,17 +1136,17 @@ function renderExtreme(kind) {
     const th = el("th", { scope: "col", title: col.tip });
     if (s.key === col.k) th.setAttribute("aria-sort", s.dir > 0 ? "ascending" : "descending");
     const b = el("button", { text: col.label + (s.key === col.k ? (s.dir > 0 ? " ↑" : " ↓") : "") });
-    b.addEventListener("click", () => { c.sort = s.key === col.k ? { key: col.k, dir: -s.dir } : { key: col.k, dir: col.k === "name" ? 1 : -1 }; renderExtreme(kind); });
+    b.addEventListener("click", () => { c.sort = s.key === col.k ? { key: col.k, dir: -s.dir } : { key: col.k, dir: col.k === "name" || (col.k === "vsMed" && buy) ? 1 : -1 }; renderExtreme(kind); });
     th.append(b); tr.append(th);
   }
   thead.append(tr);
   const tb = table.tBodies[0]; tb.replaceChildren();
-  for (const r of list.slice(0, 300)) {
+  for (const r of list) {
     const nm = el("button", { text: r.name }); nm.addEventListener("click", () => openItem(r.iid, 0));
     tb.append(el("tr", {}, el("td", { class: "name" }, nm), el("td", { text: r.label }), el("td", { text: full(r.now) }),
       el("td", { class: buy ? "down" : "up", text: pctTxt(r.vsMed) }), el("td", { text: Math.round(r.hours * 100) + "%" })));
   }
-  if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(cols.length), class: "empty", text: q ? "No item matches this search." : `No item is at its ${buy ? "low" : "high"} for this window.` })));
+  if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(cols.length), class: "empty", text: "No item matches these filters." })));
 }
 for (const [pre, kind] of [["x", "buy"], ["y", "sell"]]) {
   $(pre + "-search").addEventListener("input", (e) => { UI.ext[kind].search = e.target.value; renderExtreme(kind); });
@@ -1363,6 +1347,34 @@ function renderWatch() {
   body.append(grid);
 }
 
+// ------------------------------------------------------------------ category filter (Spread, Buy, Sell, Crafting)
+/* Five groups, every item in exactly one: Resource (resources except essences), Essence (resources named "... essence"), Food, Item (equipment) and Other (drinks, ability books,
+   dungeon keys, labyrinth and the rest).  A chip that is on shows its group; all on = everything.  The choice is shared by the four tabs. */
+const CATS = [["resource", "Resource"], ["essence", "Essence"], ["food", "Food"], ["item", "Item"], ["other", "Other"]];
+UI.cats = new Set(CATS.map((c) => c[0]));
+function groupOf(iid) {
+  const c = D.cat.get(iid);
+  if (c === "resource") return D.items.get(iid).hrid.endsWith("_essence") ? "essence" : "resource";
+  return c === "food" ? "food" : c === "equipment" ? "item" : "other";
+}
+const catOk = (iid) => !D.cat.size || UI.cats.has(groupOf(iid));
+function syncCatFilters() {
+  for (const box of document.querySelectorAll(".catf")) {
+    box.classList.toggle("hidden", !D.cat.size); // no category data in this database: nothing to filter by
+    for (const b of box.querySelectorAll("button")) b.setAttribute("aria-pressed", String(UI.cats.has(b.dataset.c)));
+  }
+}
+for (const box of document.querySelectorAll(".catf")) {
+  box.append(el("div", { style: "font-size:12px;color:var(--ink-2);margin-bottom:3px", text: "Show" }));
+  const chips = el("div", { class: "seg", role: "group", "aria-label": "Categories to show" });
+  for (const [c, label] of CATS) {
+    const b = el("button", { text: label, "data-c": c, "aria-pressed": "true", title: "Click to show or hide " + label.toLowerCase() + " items" });
+    b.addEventListener("click", () => { UI.cats.has(c) ? UI.cats.delete(c) : UI.cats.add(c); syncCatFilters(); render(); });
+    chips.append(b);
+  }
+  box.append(chips);
+}
+
 // ------------------------------------------------------------------ tabs, filters, loading
 const TABS = ["trade", "buy", "sell", "item", "craft", "watch", "settings"];
 function setTab(tab) {
@@ -1408,37 +1420,37 @@ document.addEventListener("scroll", (e) => { if (e.target.classList && e.target.
 
 function render() {
   if (!db) return;
+  syncCatFilters();
   if (UI.tab === "item") renderItem(); else if (UI.tab === "craft") renderCraft(); else if (UI.tab === "trade") renderTrade(); else if (UI.tab === "buy" || UI.tab === "sell") renderExtreme(UI.tab); else if (UI.tab === "settings") syncSkillBoxes(); else renderWatch();
   syncStickies();
 }
 
-function afterLoad() {
+function afterLoad(keep) { // keep: a refresh stays on the current tab and item
   $("load").classList.add("hidden"); $("app").classList.remove("hidden");
   const age = Math.round(Date.now() / 1000 - D.latest.ts);
-  $("meta").textContent = `${D.snaps.length} snapshot${D.snaps.length === 1 ? "" : "s"} · ${D.items.size} items · latest ${when(D.latest.ts)} (${ago(age)} ago) · first ${when(D.snaps[0].ts)}`;
+  $("meta").textContent = `${ago(age)} ago`;
   fillDrinkLists(); syncSkillBoxes();
   $("itemlist").replaceChildren(...[...D.byName.keys()].sort().map((n) => el("option", { value: n })));
   $("f-window").value = UI.windowId;
+  if (keep) { render(); return; }
   UI.item = null;
   setTab("trade");
 }
 
-async function loadBytes(buf, name) {
+async function loadBytes(buf, name, keep) {
   try {
     let bytes = buf;
     const head = new Uint8Array(buf.slice(0, 2));
     if (head[0] === 0x1f && head[1] === 0x8b) { // gzip
       bytes = await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
     }
-    await openDb(bytes); afterLoad(); $("loaderr").textContent = "";
+    await openDb(bytes); afterLoad(keep); $("loaderr").textContent = "";
   } catch (e) {
     $("load").classList.remove("hidden"); $("app").classList.add("hidden");
     $("loaderr").textContent = "Could not read " + (name || "the file") + ": " + e.message;
   }
 }
 
-$("open").addEventListener("click", () => $("file").click());
-$("file").addEventListener("change", async (e) => { const f = e.target.files[0]; if (f) loadBytes(await f.arrayBuffer(), f.name); });
 const dz = $("load");
 dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("over"); });
 dz.addEventListener("dragleave", () => dz.classList.remove("over"));
@@ -1457,23 +1469,23 @@ $("i-star").addEventListener("click", () => { if (UI.item == null) return; toggl
 $("i-hour").addEventListener("input", (e) => { const v = parseFloat(e.target.value); UI.hour = v >= 0 ? v * 1e6 : 0; renderItem(); });
 let rz, rw = window.innerWidth; // phones fire "resize" while scrolling (the address bar hides), which would redraw the Item tab and jump to the top: redraw only when the width changes
 window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (UI.tab === "item" && window.innerWidth !== rw) { rw = window.innerWidth; renderItem(); } }, 150); });
-
-// theme toggle: auto -> light -> dark
-const themes = ["auto", "light", "dark"];
-function applyTheme(t) {
-  if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", t);
-  $("theme").textContent = "Theme: " + t; store.set("mw.theme", t); render();
-}
-$("theme").addEventListener("click", () => applyTheme(themes[(themes.indexOf(store.get("mw.theme", "auto")) + 1) % 3]));
-applyTheme(store.get("mw.theme", "auto"));
-
 // auto-load when served over http next to the database
-(async () => {
-  if (!location.protocol.startsWith("http")) return;
+async function fetchDb(keep) { // true when a database was found next to the page and loaded
+  if (!location.protocol.startsWith("http")) return false;
   for (const name of ["market.db.gz", "market.db"]) {
-    try { const r = await fetch(name, { cache: "no-store" }); if (r.ok) { await loadBytes(await r.arrayBuffer(), name); return; } } catch (e) { /* try next */ }
+    try { const r = await fetch(name, { cache: "no-store" }); if (r.ok) { await loadBytes(await r.arrayBuffer(), name, keep); return true; } } catch (e) { /* try next */ }
   }
-})();
+  return false;
+}
+fetchDb(false);
+// Refresh: read the file again in place (keeps the tab and filters); when that is not possible (opened as a file, or the fetch fails) reload the page
+$("refresh").addEventListener("click", async () => {
+  const b = $("refresh"); b.disabled = true; b.textContent = "Refreshing…";
+  let ok = false;
+  try { ok = await fetchDb(true); } catch (e) { ok = false; }
+  if (!ok) { location.reload(); return; }
+  b.disabled = false; b.textContent = "Refresh";
+});
 </script>
 </body>
 </html>

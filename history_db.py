@@ -14,6 +14,7 @@ Schema
     loot_table(container_hrid, item_hrid, rate, min_count, max_count)
                                         what each crate/chest holds, reloaded every run from --loot
     drink(item_hrid, skill, seconds)    the skills each drink can be used in and its duration, reloaded every run from --drinks
+    item_category(item_hrid, category)  the game category of every item (resource, food, drink, equipment, ...), reloaded every run from --categories
     item(item_id, hrid)                 one row per item, name stored once
     snapshot(snapshot_id, ts)           one row per imported snapshot (ts = the game's unix timestamp)
     obs(item_id, level, snapshot_id,    one row per (item, enhancement level) *whenever it changed*
@@ -278,6 +279,28 @@ def load_drinks(con, path):
     print(f"loaded {len(rows)} rows into drink")
 
 
+CATEGORY_SCHEMA = """
+DROP TABLE IF EXISTS item_category;
+CREATE TABLE item_category (
+  item_hrid TEXT PRIMARY KEY,
+  category TEXT NOT NULL
+) WITHOUT ROWID;
+"""
+
+
+def load_categories(con, path):
+    """(Re)load item_category from the CSV exported by the game-data project: one row per item, category = resource, food, drink, equipment, ..."""
+    if not os.path.exists(path):
+        print(f"{path} not found - item_category table left as it is")
+        return
+    with gzip.open(path, "rt", encoding="utf-8", newline="") as f:
+        rows = [(r["item_hrid"], r["category"]) for r in csv.DictReader(f)]
+    with con:
+        con.executescript(CATEGORY_SCHEMA)
+        con.executemany("INSERT INTO item_category VALUES (?,?)", rows)
+    print(f"loaded {len(rows)} rows into item_category")
+
+
 def file_timestamp(path):
     m = re.search(r"marketplace_(\d+)\.json", os.path.basename(path))
     return int(m.group(1)) if m else 0
@@ -297,6 +320,7 @@ def main():
     ap.add_argument("--drops", default="item_drop.csv.gz", help="essence and rare drops per craft (CSV, gzip) to load")
     ap.add_argument("--loot", default="loot_table.csv.gz", help="crate/chest contents (CSV, gzip) to load")
     ap.add_argument("--drinks", default="drink.csv.gz", help="drinks and the skills they can be used in (CSV, gzip) to load")
+    ap.add_argument("--categories", default="item_category.csv.gz", help="item categories (CSV, gzip) to load")
     ap.add_argument("--rebuild", action="store_true", help="delete the database and import everything again")
     args = ap.parse_args()
 
@@ -344,6 +368,7 @@ def main():
     load_drops(con, args.drops)
     load_loot(con, args.loot)
     load_drinks(con, args.drinks)
+    load_categories(con, args.categories)
     con.close()
 
 
