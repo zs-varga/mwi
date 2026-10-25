@@ -1042,7 +1042,8 @@ function tradeRows() {
     // a bid below the range or an ask above it cannot fill and is ignored
     const bidOver = last.bid != null && last.bid > hi * (1 + TOL), askUnder = last.ask != null && last.ask < lo * (1 - TOL);
     const bidIn = bidOver ? hi : inR(last.bid) ? last.bid : null, askIn = askUnder ? lo : inR(last.ask) ? last.ask : null;
-    const B = bidIn != null ? Math.min(tickUp(bidIn), hi) : lo, A = askIn != null ? Math.max(tickDown(askIn), lo) : hi;
+    const vf = D.vendor.get(iid) || 0; // no order can be below the vendor price: stepping under an ask that sits on it lands on it instead
+    const B = Math.max(bidIn != null ? Math.min(tickUp(bidIn), hi) : lo, vf), A = Math.max(askIn != null ? Math.max(tickDown(askIn), lo) : hi, vf);
     out.push({ iid, name: D.items.get(iid).name, B, A, lo, hi, noBid: bidIn == null, noAsk: askIn == null, bidOver, askUnder, thin: seen < THIN_TRADES, queue: bidIn == null || askIn == null, crossed: B >= A, // crossed: no room between the two prices; only shown by a search
       margin: (TAXKEEP * A - B) / B, spread: ((A - B) / B) * 100,
       hours: traded / W });
@@ -1160,8 +1161,9 @@ function renderExtreme(kind) {
   ];
   const gap = (r) => Math.round(r.vsMed * 1000); // compared as shown (0.1%), so equal-looking gaps fall through to the window length
   const cmp = (a, b, k, dir) => (k === "vsMed" ? gap(a) - gap(b) : typeof a[k] === "string" ? a[k].localeCompare(b[k]) : a[k] - b[k]) * dir;
-  const onFloor = (r) => (buy && D.vendor.get(r.iid) === Math.round(r.now) ? 1 : 0); // Buy: an ask on the vendor price can be undone through the vendor at no loss, so those rows stay on top whatever the sort
-  list.sort((a, b) => onFloor(b) - onFloor(a) || cmp(a, b, s.key, s.dir) || (s.key === "vsMed" ? 0 : cmp(a, b, "vsMed", buy ? 1 : -1)) || b.span - a.span || b.swing - a.swing); // then: biggest gap to the median, longest "lowest/highest in" window, bigger swing
+  // Rows on the vendor price stay pinned whatever the sort: on Buy at the top (an ask there can be undone through the vendor at no loss), on Sell at the bottom (the vendor pays that without the market tax, so never sell there)
+  const onFloor = (r) => (D.vendor.get(r.iid) === Math.round(r.now) ? 1 : 0);
+  list.sort((a, b) => (buy ? onFloor(b) - onFloor(a) : onFloor(a) - onFloor(b)) || cmp(a, b, s.key, s.dir) || (s.key === "vsMed" ? 0 : cmp(a, b, "vsMed", buy ? 1 : -1)) || b.span - a.span || b.swing - a.swing); // then: biggest gap to the median, longest "lowest/highest in" window, bigger swing
   $(pre + "-note").replaceChildren(D.latest.ts - D.snaps[0].ts < 7 * 86400 ? el("p", { class: "note", text: `Only ${ago(D.latest.ts - D.snaps[0].ts)} of history so far; longer windows appear as it builds up.` }) : "");
   const table = $("ext-" + kind), thead = table.tHead; thead.replaceChildren();
   const tr = el("tr");
