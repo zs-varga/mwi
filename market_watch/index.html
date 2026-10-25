@@ -1125,7 +1125,7 @@ const EXT_SPANS = [["24 h", 86400], ["3 d", 3 * 86400], ["7 d", 7 * 86400], ["14
 const EXT_TOL = 0.01, EXT_MIN_SPAN = 86400; // "at" the extreme = within 1%; items must be at it for at least the shortest span to be listed
 function extSpans() { // the windows that fit in the history, plus the whole history when it is longer than the last of them
   const have = D.latest.ts - D.snaps[0].ts, sp = EXT_SPANS.filter((x) => x[1] <= have);
-  if (!sp.length || have > sp[sp.length - 1][1] * 1.1) sp.push([ago(have), have]);
+  if (!sp.length || have > sp[sp.length - 1][1] * 1.1) sp.push([have < 5400 ? Math.round(have / 60) + " min" : have < 172800 ? Math.round(have / 3600) + " h" : Math.round(have / 86400) + " d", have]); // the label of the whole history is a whole number
   return sp;
 }
 const median = (a) => { const v = [...a].sort((x, y) => x - y), m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
