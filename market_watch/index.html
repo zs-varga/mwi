@@ -11,7 +11,7 @@
   --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
   --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10); --wash: rgba(255,255,255,.06);
   --s1: #3987e5; --s2: #d95926; --s3: #199e70;
-  --up: #0ca30c; --down: #d03b3b; --accent: #3987e5;
+  --up: #0ca30c; --down: #d03b3b; --warn: #e3b341; --accent: #3987e5;
   --buy: #008300; --sell: #e66767;
   --cost1: #a98bf5; --cost2: #e3b341;
 }
@@ -1125,7 +1125,7 @@ const EXT_SPANS = [["24 h", 86400], ["3 d", 3 * 86400], ["7 d", 7 * 86400], ["14
 const EXT_TOL = 0.01, EXT_MIN_SPAN = 86400; // "at" the extreme = within 1%; items must be at it for at least the shortest span to be listed
 function extSpans() { // the windows that fit in the history, plus the whole history when it is longer than the last of them
   const have = D.latest.ts - D.snaps[0].ts, sp = EXT_SPANS.filter((x) => x[1] <= have);
-  if (!sp.length || have > sp[sp.length - 1][1] * 1.1) sp.push([ago(have) + " (all)", have]);
+  if (!sp.length || have > sp[sp.length - 1][1] * 1.1) sp.push([ago(have), have]);
   return sp;
 }
 const median = (a) => { const v = [...a].sort((x, y) => x - y), m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
@@ -1162,6 +1162,8 @@ function renderExtreme(kind) {
   const gap = (r) => Math.round(r.vsMed * 1000); // compared as shown (0.1%), so equal-looking gaps fall through to the window length
   const cmp = (a, b, k, dir) => (k === "vsMed" ? gap(a) - gap(b) : typeof a[k] === "string" ? a[k].localeCompare(b[k]) : a[k] - b[k]) * dir;
   // Rows on the vendor price stay pinned whatever the sort: on Buy at the top (an ask there can be undone through the vendor at no loss), on Sell at the bottom (the vendor pays that without the market tax, so never sell there)
+  const spans = extSpans(); // the windows in ascending order: the shorter third is red, the middle yellow, the longer third green; "—" (not at an extreme) stays plain
+  const spanColor = (secs) => { const i = spans.findIndex((x) => x[1] === secs); if (i < 0) return "color:var(--muted)"; const t = spans.length > 1 ? i / (spans.length - 1) : 1; return "color:var(" + (t < 1 / 3 ? "--down" : t < 2 / 3 ? "--warn" : "--up") + ")"; };
   const onFloor = (r) => (D.vendor.get(r.iid) === Math.round(r.now) ? 1 : 0);
   list.sort((a, b) => (buy ? onFloor(b) - onFloor(a) : onFloor(a) - onFloor(b)) || cmp(a, b, s.key, s.dir) || (s.key === "vsMed" ? 0 : cmp(a, b, "vsMed", buy ? 1 : -1)) || b.span - a.span || b.swing - a.swing); // then: biggest gap to the median, longest "lowest/highest in" window, bigger swing
   $(pre + "-note").replaceChildren(D.latest.ts - D.snaps[0].ts < 7 * 86400 ? el("p", { class: "note", text: `Only ${ago(D.latest.ts - D.snaps[0].ts)} of history so far; longer windows appear as it builds up.` }) : "");
@@ -1178,7 +1180,7 @@ function renderExtreme(kind) {
   const tb = table.tBodies[0]; tb.replaceChildren();
   fillRows(tb, list, (r) => {
     const nm = el("button", { text: r.name }); nm.addEventListener("click", () => openItem(r.iid, 0));
-    return (el("tr", {}, el("td", { class: "name" }, nm), el("td", { text: r.label }), el("td", {}, vendorIcon(D.vendor.get(r.iid), r.now), full(r.now)),
+    return (el("tr", {}, el("td", { class: "name" }, nm), el("td", { style: spanColor(r.span), text: r.label }), el("td", {}, vendorIcon(D.vendor.get(r.iid), r.now), full(r.now)),
       el("td", { class: buy ? "down" : "up", text: pctTxt(r.vsMed) }), el("td", { text: Math.round(r.hours * 100) + "%" })));
   });
   if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(cols.length), class: "empty", text: "No item matches these filters." })));
