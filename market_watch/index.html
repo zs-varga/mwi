@@ -60,6 +60,7 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
 .up { color: var(--up); } .down { color: var(--down); } .flat { color: var(--muted); }
 .sticky-head { position: fixed; top: 0; z-index: 5; overflow: hidden; display: none; background: var(--surface); border-bottom: 1px solid var(--grid); box-shadow: 0 2px 6px rgba(0,0,0,.12); }
 .sticky-head table { table-layout: fixed; width: auto; }
+.more { height: 1px; }
 .tablewrap { overflow-x: auto; } /* sideways scroll only; no max-height, so the page itself scrolls vertically */
 .charthead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 6px; }
 .charthead h3 { margin: 0; font-size: 14px; font-weight: 600; }
@@ -242,6 +243,30 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
 };
+/* Long tables are filled in pages: the first PAGE rows now, the next ones when the bottom comes within a screen or so.  The page itself scrolls, so a small
+   marker after the table is watched; sorting, searching or filtering renders the table again from the first page. */
+const PAGE = 50, pagers = new Map(); // tbody -> { obs, mark }
+function fillRows(tb, list, build) {
+  let pg = pagers.get(tb);
+  if (!pg) {
+    const mark = el("div", { class: "more", "aria-hidden": "true" });
+    tb.closest(".tablewrap").after(mark);
+    pg = { mark, obs: null, next: null }; pagers.set(tb, pg);
+  }
+  if (pg.obs) pg.obs.disconnect();
+  let shown = 0;
+  const more = () => {
+    const frag = document.createDocumentFragment();
+    for (const end = Math.min(list.length, shown + PAGE); shown < end; shown++) frag.append(build(list[shown]));
+    tb.append(frag); syncStickies();
+  };
+  more();
+  pg.obs = new IntersectionObserver((es) => {
+    if (!es.some((e) => e.isIntersecting) || shown >= list.length) return;
+    more(); pg.obs.unobserve(pg.mark); if (shown < list.length) pg.obs.observe(pg.mark); // observing again reports the marker once more, in case it is still in view
+  }, { rootMargin: "800px 0px" });
+  pg.obs.observe(pg.mark);
+}
 const pretty = (hrid) => hrid.split("/").pop().split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 const fmt = (n) => {
   if (n == null) return "—";
@@ -916,12 +941,12 @@ function renderCraft() {
   thead.append(tr);
   const tb = $("craft").tBodies[0]; tb.replaceChildren();
   const sign = (v) => (v > 0 ? "up" : v < 0 ? "down" : "");
-  for (const r of list) {
+  fillRows(tb, list, (r) => {
     const nm = el("button", { text: r.name }); nm.addEventListener("click", () => openItem(r.id, 0));
-    tb.append(el("tr", {}, el("td", { class: "name" }, nm), el("td", { text: fmt(r.rev) }),
+    return (el("tr", {}, el("td", { class: "name" }, nm), el("td", { text: fmt(r.rev) }),
       el("td", { class: sign(r.profit), text: fmt(r.profit) }), el("td", { class: sign(r.margin), text: r.margin == null ? "—" : r.margin.toFixed(r.margin < 10 ? 1 : 0) + "%" }),
       el("td", { class: sign(r.perHour), text: r.perHour == null ? "—" : fmt(r.perHour) })));
-  }
+  });
   if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(CRAFT_COLS.length), class: "empty", text: "No items match these filters." })));
 }
 for (const b of $("c-mode").children) b.addEventListener("click", () => { UI.craft.mode = b.dataset.m; renderCraft(); });
@@ -1037,7 +1062,7 @@ function renderTrade() {
   const c = UI.trade, s = c.sort;
   const all = tradeRows();
   const q = c.search.trim().toLowerCase();
-  const list = all.filter((r) => catOk(r.iid) && (!q || r.name.toLowerCase().includes(q))); // no thresholds: every item with a two-sided book; the table is cut to the row limit after sorting
+  const list = all.filter((r) => catOk(r.iid) && (!q || r.name.toLowerCase().includes(q))); // no thresholds: every item with a two-sided book; the table is filled in pages while scrolling (fillRows)
   list.sort((a, b) => {
     const x = a[s.key], y = b[s.key];
     if (x == null && y == null) return 0;
@@ -1058,13 +1083,13 @@ function renderTrade() {
   thead.append(tr);
   const tb = $("trade").tBodies[0]; tb.replaceChildren();
   const sg = (v) => (v == null ? "flat" : v > 0 ? "up" : v < 0 ? "down" : "flat");
-  for (const r of list) {
+  fillRows(tb, list, (r) => {
     const nm = el("button", { text: r.name }); nm.addEventListener("click", () => openItem(r.iid, 0));
-    tb.append(el("tr", {},
+    return (el("tr", {},
       el("td", { class: "name" }, nm, r.thin ? el("span", { class: "flat", title: "few trades on record: the game may use a wider tradeable range than the one assumed here", "aria-label": "few trades on record", text: " ⚠" }) : ""), el("td", {}, vendorIcon(D.vendor.get(r.iid), r.B), full(r.B)), el("td", {}, vendorIcon(D.vendor.get(r.iid), r.A), full(r.A)),
       el("td", { class: sg(r.margin), text: pctTxt(r.margin) }),
       el("td", { text: Math.round(r.hours * 100) + "%" })));
-  }
+  });
   if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(TRADE_COLS.length), class: "empty", text: "No item with a two-sided book matches these filters." })));
 }
 const pctTxt = (x, d = 1) => (x == null ? "—" : (x * 100).toFixed(d) + "%");
@@ -1149,11 +1174,11 @@ function renderExtreme(kind) {
   }
   thead.append(tr);
   const tb = table.tBodies[0]; tb.replaceChildren();
-  for (const r of list) {
+  fillRows(tb, list, (r) => {
     const nm = el("button", { text: r.name }); nm.addEventListener("click", () => openItem(r.iid, 0));
-    tb.append(el("tr", {}, el("td", { class: "name" }, nm), el("td", { text: r.label }), el("td", {}, vendorIcon(D.vendor.get(r.iid), r.now), full(r.now)),
+    return (el("tr", {}, el("td", { class: "name" }, nm), el("td", { text: r.label }), el("td", {}, vendorIcon(D.vendor.get(r.iid), r.now), full(r.now)),
       el("td", { class: buy ? "down" : "up", text: pctTxt(r.vsMed) }), el("td", { text: Math.round(r.hours * 100) + "%" })));
-  }
+  });
   if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(cols.length), class: "empty", text: "No item matches these filters." })));
 }
 for (const [pre, kind] of [["x", "buy"], ["y", "sell"]]) {
