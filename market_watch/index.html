@@ -903,7 +903,6 @@ function renderCraft() {
     if (x == null) return 1; if (y == null) return -1; // missing values always last
     return (typeof x === "string" ? x.localeCompare(y) : x - y) * s.dir;
   });
-  $("c-summary").textContent = `${all.length} craftable items priced · ${all.filter((r) => r.profit > 0).length} profitable · ${list.length} shown · prices from ${when(D.latest.ts)} · instant buy at ask, instant sell at bid minus ${Math.round(MARKET_TAX * 100)}%`;
   for (const b of $("c-mode").children) b.setAttribute("aria-pressed", String(b.dataset.m === c.mode));
   const thead = $("craft").tHead; thead.replaceChildren();
   const tr = el("tr");
