@@ -14,6 +14,7 @@ Schema
     loot_table(container_hrid, item_hrid, rate, min_count, max_count)
                                         what each crate/chest holds, reloaded every run from --loot
     drink(item_hrid, skill, seconds)    the skills each drink can be used in and its duration, reloaded every run from --drinks
+    item_vendor(item_hrid, price)       what the game's vendor pays for an item; a market bid can never be lower, reloaded every run from --vendor
     item_category(item_hrid, category)  the game category of every item (resource, food, drink, equipment, ...), reloaded every run from --categories
     item(item_id, hrid)                 one row per item, name stored once
     snapshot(snapshot_id, ts)           one row per imported snapshot (ts = the game's unix timestamp)
@@ -301,6 +302,28 @@ def load_categories(con, path):
     print(f"loaded {len(rows)} rows into item_category")
 
 
+VENDOR_SCHEMA = """
+DROP TABLE IF EXISTS item_vendor;
+CREATE TABLE item_vendor (
+  item_hrid TEXT PRIMARY KEY,
+  price INTEGER NOT NULL
+) WITHOUT ROWID;
+"""
+
+
+def load_vendor(con, path):
+    """(Re)load item_vendor from the CSV exported by the game-data project: the vendor sell price of every item that has one."""
+    if not os.path.exists(path):
+        print(f"{path} not found - item_vendor table left as it is")
+        return
+    with gzip.open(path, "rt", encoding="utf-8", newline="") as f:
+        rows = [(r["item_hrid"], int(r["price"])) for r in csv.DictReader(f)]
+    with con:
+        con.executescript(VENDOR_SCHEMA)
+        con.executemany("INSERT INTO item_vendor VALUES (?,?)", rows)
+    print(f"loaded {len(rows)} rows into item_vendor")
+
+
 def file_timestamp(path):
     m = re.search(r"marketplace_(\d+)\.json", os.path.basename(path))
     return int(m.group(1)) if m else 0
@@ -321,6 +344,7 @@ def main():
     ap.add_argument("--loot", default="loot_table.csv.gz", help="crate/chest contents (CSV, gzip) to load")
     ap.add_argument("--drinks", default="drink.csv.gz", help="drinks and the skills they can be used in (CSV, gzip) to load")
     ap.add_argument("--categories", default="item_category.csv.gz", help="item categories (CSV, gzip) to load")
+    ap.add_argument("--vendor", default="item_vendor.csv.gz", help="vendor sell prices (CSV, gzip) to load")
     ap.add_argument("--rebuild", action="store_true", help="delete the database and import everything again")
     args = ap.parse_args()
 
@@ -369,6 +393,7 @@ def main():
     load_loot(con, args.loot)
     load_drinks(con, args.drinks)
     load_categories(con, args.categories)
+    load_vendor(con, args.vendor)
     con.close()
 
 
