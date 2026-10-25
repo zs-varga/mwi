@@ -1136,7 +1136,8 @@ function renderExtreme(kind) {
   ];
   const gap = (r) => Math.round(r.vsMed * 1000); // compared as shown (0.1%), so equal-looking gaps fall through to the window length
   const cmp = (a, b, k, dir) => (k === "vsMed" ? gap(a) - gap(b) : typeof a[k] === "string" ? a[k].localeCompare(b[k]) : a[k] - b[k]) * dir;
-  list.sort((a, b) => cmp(a, b, s.key, s.dir) || (s.key === "vsMed" ? 0 : cmp(a, b, "vsMed", buy ? 1 : -1)) || b.span - a.span || b.swing - a.swing); // then: biggest gap to the median, longest "lowest/highest in" window, bigger swing
+  const onFloor = (r) => (buy && D.vendor.get(r.iid) === Math.round(r.now) ? 1 : 0); // Buy: an ask on the vendor price can be undone through the vendor at no loss, so those rows stay on top whatever the sort
+  list.sort((a, b) => onFloor(b) - onFloor(a) || cmp(a, b, s.key, s.dir) || (s.key === "vsMed" ? 0 : cmp(a, b, "vsMed", buy ? 1 : -1)) || b.span - a.span || b.swing - a.swing); // then: biggest gap to the median, longest "lowest/highest in" window, bigger swing
   $(pre + "-note").replaceChildren(D.latest.ts - D.snaps[0].ts < 7 * 86400 ? el("p", { class: "note", text: `Only ${ago(D.latest.ts - D.snaps[0].ts)} of history so far; longer windows appear as it builds up.` }) : "");
   const table = $("ext-" + kind), thead = table.tHead; thead.replaceChildren();
   const tr = el("tr");
@@ -1357,27 +1358,29 @@ function renderWatch() {
 
 // ------------------------------------------------------------------ category filter (Spread, Buy, Sell, Crafting)
 /* Five groups, every item in exactly one: Resource (resources except essences), Essence (resources named "... essence"), Food, Item (equipment) and Other (drinks, ability books,
-   dungeon keys, labyrinth and the rest).  A chip that is on shows its group; all on = everything.  The choice is shared by the four tabs. */
+   dungeon keys, labyrinth and the rest).  A chip that is on shows its group; all on = everything.  Spread, Buy and Sell share one choice (Item off by default), Crafting has its own (all on). */
 const CATS = [["resource", "Resource"], ["essence", "Essence"], ["food", "Food"], ["item", "Item"], ["other", "Other"]];
-UI.cats = new Set(CATS.map((c) => c[0]));
+UI.cats = new Set(CATS.map((c) => c[0]).filter((c) => c !== "item")); // Spread, Buy, Sell
+UI.catsCraft = new Set(CATS.map((c) => c[0]));
+const catSet = (box) => (box.closest("#p-craft") ? UI.catsCraft : UI.cats);
 function groupOf(iid) {
   const c = D.cat.get(iid);
   if (c === "resource") return D.items.get(iid).hrid.endsWith("_essence") ? "essence" : "resource";
   return c === "food" ? "food" : c === "equipment" ? "item" : "other";
 }
-const catOk = (iid) => !D.cat.size || UI.cats.has(groupOf(iid));
+const catOk = (iid) => !D.cat.size || (UI.tab === "craft" ? UI.catsCraft : UI.cats).has(groupOf(iid));
 function syncCatFilters() {
   for (const box of document.querySelectorAll(".catf")) {
     box.classList.toggle("hidden", !D.cat.size); // no category data in this database: nothing to filter by
-    for (const b of box.querySelectorAll("button")) b.setAttribute("aria-pressed", String(UI.cats.has(b.dataset.c)));
+    for (const b of box.querySelectorAll("button")) b.setAttribute("aria-pressed", String(catSet(box).has(b.dataset.c)));
   }
 }
 for (const box of document.querySelectorAll(".catf")) {
   box.append(el("div", { style: "font-size:12px;color:var(--ink-2);margin-bottom:3px", text: "Show" }));
   const chips = el("div", { class: "seg", role: "group", "aria-label": "Categories to show" });
   for (const [c, label] of CATS) {
-    const b = el("button", { text: label, "data-c": c, "aria-pressed": "true", title: "Click to show or hide " + label.toLowerCase() + " items" });
-    b.addEventListener("click", () => { UI.cats.has(c) ? UI.cats.delete(c) : UI.cats.add(c); syncCatFilters(); render(); });
+    const b = el("button", { text: label, "data-c": c, "aria-pressed": String(catSet(box).has(c)), title: "Click to show or hide " + label.toLowerCase() + " items" });
+    b.addEventListener("click", () => { const set = catSet(box); set.has(c) ? set.delete(c) : set.add(c); syncCatFilters(); render(); });
     chips.append(b);
   }
   box.append(chips);
