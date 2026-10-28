@@ -29,9 +29,9 @@ button, select, input { font: inherit; color: var(--ink); }
 .btn.on { background: var(--wash); border-color: var(--ink-2); font-weight: 600; }
 .btn:focus-visible, select:focus-visible, input:focus-visible, th button:focus-visible, td button:focus-visible, svg:focus-visible
   { outline: 2px solid var(--accent); outline-offset: 2px; }
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--grid); margin: 8px 0 14px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--grid); margin: 8px 0 14px; overflow-x: auto; }
 #tab-watch { margin-left: auto; } /* Watchlist and Settings sit at the right edge */
-.tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 14px; cursor: pointer; color: var(--ink-2); }
+.tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 14px; cursor: pointer; color: var(--ink-2); white-space: nowrap; flex: none; }
 .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
 .filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; margin-bottom: 12px; }
 .filters label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--ink-2); }
@@ -142,11 +142,13 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
 <main id="app" class="hidden">
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" id="tab-trade" aria-selected="true">Spread</button>
-    <button class="tab" role="tab" id="tab-buy" aria-selected="false">Buy</button>
-    <button class="tab" role="tab" id="tab-sell" aria-selected="false">Sell</button>
+    <button class="tab" role="tab" id="tab-buy" title="Instant buy: items whose ask is at a low" aria-selected="false">⚡ Buy</button>
+    <button class="tab" role="tab" id="tab-sell" title="Instant sell: items whose bid is at a high" aria-selected="false">⚡ Sell</button>
+    <button class="tab" role="tab" id="tab-pbuy" title="Patient buy (buy order): items whose bid is at a low" aria-selected="false">⏳ Buy</button>
+    <button class="tab" role="tab" id="tab-psell" title="Patient sell (sell order): items whose ask is at a high" aria-selected="false">⏳ Sell</button>
     <button class="tab" role="tab" id="tab-item" aria-selected="false">Item</button>
-    <button class="tab" role="tab" id="tab-craft" aria-selected="false">Crafting</button>
-    <button class="tab" role="tab" id="tab-watch" aria-selected="false">Watchlist</button>
+    <button class="tab" role="tab" id="tab-craft" aria-selected="false">Craft</button>
+    <button class="tab" role="tab" id="tab-watch" aria-selected="false">Watch</button>
     <button class="tab" role="tab" id="tab-settings" aria-selected="false">Settings</button>
   </div>
 
@@ -211,6 +213,24 @@ td.star button[aria-pressed="true"] { color: var(--ink); }
     </div>
     <div id="y-note"></div>
     <div class="card"><div class="tablewrap"><table id="ext-sell"><thead></thead><tbody></tbody></table></div></div>
+  </section>
+
+  <section id="p-pbuy" class="hidden">
+    <div class="filters">
+      <label>Search <input id="z-search" type="search" placeholder="item name"></label>
+      <div class="catf"></div>
+    </div>
+    <div id="z-note"></div>
+    <div class="card"><div class="tablewrap"><table id="ext-pbuy"><thead></thead><tbody></tbody></table></div></div>
+  </section>
+
+  <section id="p-psell" class="hidden">
+    <div class="filters">
+      <label>Search <input id="w-search" type="search" placeholder="item name"></label>
+      <div class="catf"></div>
+    </div>
+    <div id="w-note"></div>
+    <div class="card"><div class="tablewrap"><table id="ext-psell"><thead></thead><tbody></tbody></table></div></div>
   </section>
 
   <section id="p-watch" class="hidden">
@@ -1096,11 +1116,19 @@ function renderTrade() {
 const pctTxt = (x, d = 1) => (x == null ? "—" : (x * 100).toFixed(d) + "%");
 
 // ------------------------------------------------------------------ buy / sell: items at their low / high
-/* Buy lists items whose ask is at its lowest, Sell items whose bid is at its highest, each labelled with the longest window (24 h ... 90 d, all history) in which that holds,
+/* Buy lists items whose ask is at its lowest, Sell items whose bid is at its highest (instant trades); Patient buy lists items whose bid is at its lowest, Patient sell items whose ask is at its highest (posted orders), each labelled with the longest window (24 h ... 90 d, all history) in which that holds,
    like a "new 3-month low" screen: no window to pick, a longer window means a more significant extreme.  Only quotes inside the estimated tradeable range
    count (rangeSeries), so a stale bid at 30% of the price or a 1T placeholder ask never makes a fake low or high.  "At" means within 1% of the window extreme.  Items whose price moved less than MIN_SWING over the window are left out: a flat price is always "at its low". */
 const MIN_SWING = 0.05;
-UI.ext = { buy: { sort: { key: "vsMed", dir: 1 }, search: "" }, sell: { sort: { key: "vsMed", dir: -1 }, search: "" } }; // biggest gap to the median first, then the longest extreme
+/* Four views of the same series: instant buy pays the ask, instant sell receives the bid; patient buy posts a buy order, so it pays the bid, patient sell posts a sell order and receives the ask.
+   "low" = the tab looks for the price at its lowest (buying), otherwise at its highest (selling). */
+const EXT = {
+  buy:   { field: "ask", low: true,  pre: "x", now: "Ask now", nowTip: "Best ask inside the estimated range: what you would pay now by buying instantly" },
+  sell:  { field: "bid", low: false, pre: "y", now: "Bid now", nowTip: "Best bid inside the estimated range: what you would get now by selling instantly" },
+  pbuy:  { field: "bid", low: true,  pre: "z", now: "Bid now", nowTip: "Best bid inside the estimated range: the price a buy order posted now would queue at (you would pay about this, once it fills)" },
+  psell: { field: "ask", low: false, pre: "w", now: "Ask now", nowTip: "Best ask inside the estimated range: the price a sell order posted now would queue at (you would get about this, once it fills)" },
+};
+UI.ext = Object.fromEntries(Object.entries(EXT).map(([k, c]) => [k, { sort: { key: "vsMed", dir: c.low ? 1 : -1 }, search: "" }])); // biggest gap to the median first, then the longest extreme
 const extCache = new Map(); // item id -> { ts[], ask[], bid[], traded } with quotes outside the range removed (null); rebuilt for every new latest snapshot
 let extFor = null;
 function extSeries() {
@@ -1130,9 +1158,9 @@ function extSpans() { // the windows that fit in the history, plus the whole his
 }
 const median = (a) => { const v = [...a].sort((x, y) => x - y), m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
 function extRows(kind) {
-  const buy = kind === "buy", spans = extSpans(), out = [];
+  const buy = EXT[kind].low, spans = extSpans(), out = [];
   for (const [iid, e] of extSeries()) {
-    const arr = buy ? e.ask : e.bid, n = arr.length, now = arr[n - 1];
+    const arr = e[EXT[kind].field], n = arr.length, now = arr[n - 1];
     if (now == null) continue;
     let best = null, fb = null;
     for (const [label, secs] of spans) { // ascending: keep the longest window in which the price is at its extreme
@@ -1149,14 +1177,14 @@ function extRows(kind) {
 }
 
 function renderExtreme(kind) {
-  const buy = kind === "buy", c = UI.ext[kind], s = c.sort, pre = buy ? "x" : "y";
+  const buy = EXT[kind].low, c = UI.ext[kind], s = c.sort, pre = EXT[kind].pre;
   const q = c.search.trim().toLowerCase();
   const list = extRows(kind).filter((r) => catOk(r.iid) && (!q || r.name.toLowerCase().includes(q)));
   const cols = [
     { k: "name", label: "Item", tip: "" },
     { k: "span", label: buy ? "Lowest in" : "Highest in", tip: "The longest window (24 h, 3 d, 7 d, 14 d, 30 d, 90 d, or all history) in which the price is at its extreme, within 1%. Longer = more significant." },
-    { k: "now", label: buy ? "Ask now" : "Bid now", tip: buy ? "Best ask inside the estimated range: what you would pay now" : "Best bid inside the estimated range: what you would get now" },
-    { k: "vsMed", label: "vs median", tip: (buy ? "How far the ask is below" : "How far the bid is above") + " its median over that window: the size of the opportunity against the normal price" },
+    { k: "now", label: EXT[kind].now, tip: EXT[kind].nowTip },
+    { k: "vsMed", label: "vs median", tip: "How far the " + EXT[kind].field + (buy ? " is below" : " is above") + " its median over that window: the size of the opportunity against the normal price" },
     { k: "hours", label: "Hours traded", tip: "Share of the last 24 hours in which the item traded at all" },
   ];
   const gap = (r) => Math.round(r.vsMed * 1000); // compared as shown (0.1%), so equal-looking gaps fall through to the window length
@@ -1185,7 +1213,7 @@ function renderExtreme(kind) {
   });
   if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(cols.length), class: "empty", text: "No item matches these filters." })));
 }
-for (const [pre, kind] of [["x", "buy"], ["y", "sell"]]) {
+for (const [kind, { pre }] of Object.entries(EXT)) {
   $(pre + "-search").addEventListener("input", (e) => { UI.ext[kind].search = e.target.value; renderExtreme(kind); });
 }
 
@@ -1388,7 +1416,7 @@ function renderWatch() {
 /* Five groups, every item in exactly one: Resource (resources except essences), Essence (resources named "... essence"), Food, Item (equipment) and Other (drinks, ability books,
    dungeon keys, labyrinth and the rest).  A chip that is on shows its group; all on = everything.  Spread, Buy and Sell share one choice (Item off by default), Crafting has its own (all on). */
 const CATS = [["resource", "Resource"], ["essence", "Essence"], ["food", "Food"], ["item", "Item"], ["other", "Other"]];
-UI.cats = new Set(CATS.map((c) => c[0]).filter((c) => c !== "item")); // Spread, Buy, Sell
+UI.cats = new Set(CATS.map((c) => c[0]).filter((c) => c !== "item")); // Spread, Buy, Sell, Patient buy, Patient sell
 UI.catsCraft = new Set(CATS.map((c) => c[0]));
 const catSet = (box) => (box.closest("#p-craft") ? UI.catsCraft : UI.cats);
 function groupOf(iid) {
@@ -1415,7 +1443,7 @@ for (const box of document.querySelectorAll(".catf")) {
 }
 
 // ------------------------------------------------------------------ tabs, filters, loading
-const TABS = ["trade", "buy", "sell", "item", "craft", "watch", "settings"];
+const TABS = ["trade", "buy", "sell", "pbuy", "psell", "item", "craft", "watch", "settings"];
 function setTab(tab) {
   UI.tab = tab;
   for (const t of TABS) {
@@ -1460,7 +1488,7 @@ document.addEventListener("scroll", (e) => { if (e.target.classList && e.target.
 function render() {
   if (!db) return;
   syncCatFilters();
-  if (UI.tab === "item") renderItem(); else if (UI.tab === "craft") renderCraft(); else if (UI.tab === "trade") renderTrade(); else if (UI.tab === "buy" || UI.tab === "sell") renderExtreme(UI.tab); else if (UI.tab === "settings") syncSkillBoxes(); else renderWatch();
+  if (UI.tab === "item") renderItem(); else if (UI.tab === "craft") renderCraft(); else if (UI.tab === "trade") renderTrade(); else if (UI.tab in EXT) renderExtreme(UI.tab); else if (UI.tab === "settings") syncSkillBoxes(); else renderWatch();
   syncStickies();
 }
 
