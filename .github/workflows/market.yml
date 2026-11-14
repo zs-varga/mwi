@@ -24,7 +24,8 @@ concurrency:
 
 env:
   RELEASE_TAG: market-history
-  DB_ASSET: market.db.gz
+  DB_ASSET: market.db.gz            # raw history (every change of every item): the permanent archive, not served on the site
+  DASH_ASSET: dashboard.db.gz       # small database built from it for the dashboard (build_dashboard_db.py)
 
 jobs:
   fetch:
@@ -76,6 +77,7 @@ jobs:
 
       # Keep the history database (release asset) up to date: download it, import any snapshot it
       # does not have yet, upload it again.  Without an existing release it is built from all snapshots.
+      # Then rebuild the dashboard database from it (always from scratch, so a change of the model needs no migration).
       - name: Update the history database
         if: steps.commit.outputs.committed == 'true' || github.event_name == 'workflow_dispatch'
         env:
@@ -84,20 +86,26 @@ jobs:
           gh release download "$RELEASE_TAG" --pattern "$DB_ASSET" --clobber || echo "no database yet - building from scratch"
           if [ -f "$DB_ASSET" ]; then gunzip -f "$DB_ASSET"; fi
           python3 history_db.py --db market.db --snapshots snapshots
+          python3 build_dashboard_db.py --src market.db --out dashboard.db
           gzip -9 -f market.db
+          gzip -9 -f dashboard.db
           gh release view "$RELEASE_TAG" > /dev/null 2>&1 || gh release create "$RELEASE_TAG" \
             --title "Market history database" \
-            --notes "market.db.gz: SQLite price history (delta format, see history_db.py). Rebuilt hourly by the workflow."
+            --notes "market.db.gz: SQLite price history (delta format, see history_db.py). dashboard.db.gz: the small database the dashboard reads (build_dashboard_db.py). Both rebuilt hourly by the workflow."
           # GitHub's upload endpoint sometimes answers with a 5xx (e.g. 502); --clobber deletes the old asset first,
           # so a failed upload would leave the release without a database.  Retry a few times before giving up.
-          for attempt in 1 2 3 4; do
-            if gh release upload "$RELEASE_TAG" "$DB_ASSET" --clobber; then break; fi
-            if [ "$attempt" = 4 ]; then echo "upload failed 4 times"; exit 1; fi
-            echo "upload failed (attempt $attempt), retrying in $((attempt * 15)) s"
-            sleep $((attempt * 15))
-          done
+          upload() {
+            for attempt in 1 2 3 4; do
+              if gh release upload "$RELEASE_TAG" "$1" --clobber; then return 0; fi
+              if [ "$attempt" = 4 ]; then echo "upload of $1 failed 4 times"; exit 1; fi
+              echo "upload of $1 failed (attempt $attempt), retrying in $((attempt * 15)) s"
+              sleep $((attempt * 15))
+            done
+          }
+          upload "$DB_ASSET"
+          upload "$DASH_ASSET"
 
-  # Publish the dashboard (market_watch/index.html) together with the latest database to GitHub Pages,
+  # Publish the dashboard (market_watch/index.html) together with the latest dashboard database to GitHub Pages,
   # so it can be watched at https://<user>.github.io/<repo>/ .  One-time setup: repo Settings > Pages >
   # Source = "GitHub Actions".
   pages:
@@ -115,7 +123,7 @@ jobs:
         run: |
           mkdir site
           cp market_watch/index.html site/
-          gh release download "$RELEASE_TAG" --pattern "$DB_ASSET" --dir site
+          gh release download "$RELEASE_TAG" --pattern "$DASH_ASSET" --dir site
 
       - uses: actions/upload-pages-artifact@v3
         with:
