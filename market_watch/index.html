@@ -1069,13 +1069,16 @@ const MIN_SWING = 0.05;
 /* Four views of the same series: instant buy pays the ask, instant sell receives the bid; patient buy posts a buy order, so it pays the bid, patient sell posts a sell order and receives the ask.
    "low" = the tab looks for the price at its lowest (buying), otherwise at its highest (selling). */
 const EXT = {
-  buy:   { field: "ask", low: true,  pre: "x", now: "Ask now", nowTip: "Best ask inside the estimated range: what you would pay now by buying instantly" },
-  sell:  { field: "bid", low: false, pre: "y", now: "Bid now", nowTip: "Best bid inside the estimated range: what you would get now by selling instantly" },
-  pbuy:  { field: "bid", low: true,  pre: "z", now: "Bid now", nowTip: "Best bid inside the estimated range: the price a buy order posted now would queue at (you would pay about this, once it fills)" },
-  psell: { field: "ask", low: false, pre: "w", now: "Ask now", nowTip: "Best ask inside the estimated range: the price a sell order posted now would queue at (you would get about this, once it fills)" },
+  buy:   { field: "ask", low: true,  pre: "x", now: "Ask", nowTip: "Best ask inside the estimated range: what you would pay now by buying instantly" },
+  sell:  { field: "bid", low: false, pre: "y", now: "Bid", nowTip: "Best bid inside the estimated range: what you would get now by selling instantly" },
+  pbuy:  { field: "bid", low: true,  pre: "z", now: "Bid", nowTip: "Best bid inside the estimated range: the price a buy order posted now would queue at (you would pay about this, once it fills)" },
+  psell: { field: "ask", low: false, pre: "w", now: "Ask", nowTip: "Best ask inside the estimated range: the price a sell order posted now would queue at (you would get about this, once it fills)" },
 };
-UI.ext = Object.fromEntries(Object.entries(EXT).map(([k, c]) => [k, { sort: { key: "vsMed", dir: c.low ? 1 : -1 }, search: "" }])); // biggest gap to the median first, then the longest extreme
+UI.ext = Object.fromEntries(Object.entries(EXT).map(([k, c]) => [k, { sort: { key: "v30", dir: c.low ? 1 : -1 }, search: "" }])); // biggest gap to the 30-day median first, then the longest extreme
 const EXT_SPANS = [["24 h", 86400], ["3 d", 3 * 86400], ["7 d", 7 * 86400], ["14 d", 14 * 86400], ["30 d", 30 * 86400], ["90 d", 90 * 86400]];
+const TREND_ICON = [{ still: "↗", turn: "⤵\uFE0E" }, { still: "↘", turn: "⤴\uFE0E" }]; // [sell, buy]: red = the move goes on (not yet), green = it has turned (the text presentation, not the emoji)
+const TREND_TIP = [{ still: "Still rising: within 2% of its 7-day high", turn: "Coming back down: at least 3% below its 7-day high, still above its 7-day median" }, { still: "Still falling: within 2% of its 7-day low", turn: "Rebounding: at least 3% above its 7-day low, still below its 7-day median" }];
+const TREND_NEAR = 0.02, TREND_OFF = 0.03; // within 2% of the 7-day low = falling; at least 3% above it (and below the 7-day median) = rebounding
 const EXT_TOL = 0.01, EXT_MIN_SPAN = 86400; // "at" the extreme = within 1%; items must be at it for at least the shortest span to be listed
 function extSpans() { // the windows that fit in the history, plus the whole history when it is longer than the last of them
   const have = D.latest.ts - D.first, sp = EXT_SPANS.filter((x) => x[1] <= have);
@@ -1101,8 +1104,13 @@ function extRows(kind) { // min / max / median of the in-range quotes per window
       if (buy ? now <= mn * (1 + EXT_TOL) : now >= mx * (1 - EXT_TOL)) best = { label, secs, mn, mx, med };
     }
     if (!fb) continue;
+    const have = D.latest.ts - D.first, vs = (secs) => { const m = D.spans.get(iid + "|" + f + "|" + secs); return m && have >= secs ? now / m.med - 1 : null; }; // gap to the median of a fixed window, null while the history is shorter
     if (!best || best.secs < Math.min(EXT_MIN_SPAN, spans[0][1])) best = fb; // not at an extreme: listed with "—" and its gap to the median of the shortest window
-    out.push({ iid, name: D.items.get(iid).name, now, mn: best.mn, mx: best.mx, span: best.secs, label: best.label, swing: best.mx > best.mn ? best.mx / best.mn - 1 : 0, hours: cur.traded / D.window, med: best.med, vsMed: now / best.med - 1 });
+    const s7 = have >= 7 * 86400 ? D.spans.get(iid + "|" + f + "|" + 7 * 86400) : null, ok7 = s7 && s7.mn > 0 && s7.mx / s7.mn - 1 >= MIN_SWING; // a flat price (vendor price, no movement) has no trend
+    const away = !ok7 ? null : buy ? now / s7.mn - 1 : 1 - now / s7.mx; // how far the price has moved back from its 7-day low (buy) or high (sell)
+    const trend = away == null || D.vendor.get(iid) === Math.round(now) ? null : // on the vendor price it cannot move further
+      away <= TREND_NEAR ? "still" : away >= TREND_OFF && (buy ? now < s7.med : now > s7.med) ? "turn" : null; // still: at its 7-day extreme, the move goes on; turn: clearly off it but not yet back to the 7-day median
+    out.push({ iid, trend, name: D.items.get(iid).name, now, mn: best.mn, mx: best.mx, span: best.secs, label: best.label, swing: best.mx > best.mn ? best.mx / best.mn - 1 : 0, hours: cur.traded / D.window, v30: vs(30 * 86400), v7: vs(7 * 86400), v1: vs(86400) });
   }
   return out;
 }
@@ -1113,18 +1121,21 @@ function renderExtreme(kind) {
   const list = extRows(kind).filter((r) => catOk(r.iid) && (!q || r.name.toLowerCase().includes(q)));
   const cols = [
     { k: "name", label: "Item", tip: "" },
+    ...[["v30", "30d", "30 days"], ["v7", "7d", "7 days"], ["v1", "1d", "24 hours"]].map(([k, label, long]) => ({ k, label, tip: "How far the " + EXT[kind].field + (buy ? " is below" : " is above") + " its median over the last " + long + ": the size of the opportunity against the normal price (— until there is that much history)" })),
     { k: "span", label: buy ? "Lowest in" : "Highest in", tip: "The longest window (24 h, 3 d, 7 d, 14 d, 30 d, 90 d, or all history) in which the price is at its extreme, within 1%. Longer = more significant." },
     { k: "now", label: EXT[kind].now, tip: EXT[kind].nowTip },
-    { k: "vsMed", label: "vs median", tip: "How far the " + EXT[kind].field + (buy ? " is below" : " is above") + " its median over that window: the size of the opportunity against the normal price" },
-    { k: "hours", label: "Hours traded", tip: "Share of the last 24 hours in which the item traded at all" },
+    { k: "hours", label: "Traded", tip: "Share of the last 24 hours in which the item traded at all" },
   ];
-  const gap = (r) => Math.round(r.vsMed * 1000); // compared as shown (0.1%), so equal-looking gaps fall through to the window length
-  const cmp = (a, b, k, dir) => (k === "vsMed" ? gap(a) - gap(b) : typeof a[k] === "string" ? a[k].localeCompare(b[k]) : a[k] - b[k]) * dir;
+  const GAPS = ["v30", "v7", "v1"], gap = (r, k) => (r[k] == null ? null : Math.round(r[k] * 1000)); // compared as shown (0.1%), so equal-looking gaps fall through to the window length
+  const cmp = (a, b, k, dir) => {
+    if (GAPS.includes(k)) { const x = gap(a, k), y = gap(b, k); return x == null || y == null ? (x == null) - (y == null) : (x - y) * dir; } // items without that window go last
+    return (typeof a[k] === "string" ? a[k].localeCompare(b[k]) : a[k] - b[k]) * dir;
+  };
   // Rows on the vendor price stay pinned whatever the sort: on Buy at the top (an ask there can be undone through the vendor at no loss), on Sell at the bottom (the vendor pays that without the market tax, so never sell there)
   const spans = extSpans(); // the windows in ascending order: the shorter third is red, the middle yellow, the longer third green; "—" (not at an extreme) stays plain
   const spanColor = (secs) => { const i = spans.findIndex((x) => x[1] === secs); if (i < 0) return "color:var(--muted)"; const t = spans.length > 1 ? i / (spans.length - 1) : 1; return "color:var(" + (t < 1 / 3 ? "--down" : t < 2 / 3 ? "--warn" : "--up") + ")"; };
   const onFloor = (r) => (D.vendor.get(r.iid) === Math.round(r.now) ? 1 : 0);
-  list.sort((a, b) => (buy ? onFloor(b) - onFloor(a) : onFloor(a) - onFloor(b)) || cmp(a, b, s.key, s.dir) || (s.key === "vsMed" ? 0 : cmp(a, b, "vsMed", buy ? 1 : -1)) || b.span - a.span || b.swing - a.swing); // then: biggest gap to the median, longest "lowest/highest in" window, bigger swing
+  list.sort((a, b) => (buy ? onFloor(b) - onFloor(a) : onFloor(a) - onFloor(b)) || cmp(a, b, s.key, s.dir) || (s.key === "v30" ? 0 : cmp(a, b, "v30", buy ? 1 : -1)) || b.span - a.span || b.swing - a.swing); // then: biggest gap to the 30-day median, longest "lowest/highest in" window, bigger swing
   $(pre + "-note").replaceChildren(D.latest.ts - D.first < 7 * 86400 ? el("p", { class: "note", text: `Only ${ago(D.latest.ts - D.first)} of history so far; longer windows appear as it builds up.` }) : "");
   const table = $("ext-" + kind), thead = table.tHead; thead.replaceChildren();
   const tr = el("tr");
@@ -1132,15 +1143,16 @@ function renderExtreme(kind) {
     const th = el("th", { scope: "col", title: col.tip });
     if (s.key === col.k) th.setAttribute("aria-sort", s.dir > 0 ? "ascending" : "descending");
     const b = el("button", { text: col.label + (s.key === col.k ? (s.dir > 0 ? " ↑" : " ↓") : "") });
-    b.addEventListener("click", () => { c.sort = s.key === col.k ? { key: col.k, dir: -s.dir } : { key: col.k, dir: col.k === "name" || (col.k === "vsMed" && buy) ? 1 : -1 }; renderExtreme(kind); });
+    b.addEventListener("click", () => { c.sort = s.key === col.k ? { key: col.k, dir: -s.dir } : { key: col.k, dir: col.k === "name" || (GAPS.includes(col.k) && buy) ? 1 : -1 }; renderExtreme(kind); });
     th.append(b); tr.append(th);
   }
   thead.append(tr);
   const tb = table.tBodies[0]; tb.replaceChildren();
   fillRows(tb, list, (r) => {
     const nm = el("button", { text: r.name }); nm.addEventListener("click", () => openItem(r.iid, 0));
-    return (el("tr", {}, el("td", { class: "name" }, nm), el("td", { style: spanColor(r.span), text: r.label }), el("td", {}, vendorIcon(D.vendor.get(r.iid), r.now), full(r.now)),
-      el("td", { class: buy ? "down" : "up", text: pctTxt(r.vsMed) }), el("td", { text: Math.round(r.hours * 100) + "%" })));
+    const tr_ = r.trend ? el("span", { style: "margin-left:6px;font-weight:700;color:var(" + (r.trend === "still" ? "--down" : "--up") + ")", title: TREND_TIP[buy ? 1 : 0][r.trend], text: TREND_ICON[buy ? 1 : 0][r.trend] }) : "";
+    return (el("tr", {}, el("td", { class: "name" }, nm, tr_), ...GAPS.map((k) => el("td", r[k] == null ? { style: "color:var(--muted)", text: "—" } : { class: buy ? "down" : "up", text: pctTxt(r[k]) })),
+      el("td", { style: spanColor(r.span), text: r.label }), el("td", {}, vendorIcon(D.vendor.get(r.iid), r.now), full(r.now)), el("td", { text: Math.round(r.hours * 100) + "%" })));
   });
   if (!list.length) tb.append(el("tr", {}, el("td", { colspan: String(cols.length), class: "empty", text: "No item matches these filters." })));
 }
