@@ -129,6 +129,11 @@ jobs:
         with:
           path: site
 
+      # The artifact is sometimes not visible to deploy-pages right after the upload ("No artifacts named
+      # github-pages were found"), so give GitHub a moment before the first attempt.
+      - name: Wait for the artifact to become visible
+        run: sleep 20
+
       # GitHub Pages deployments fail now and then for reasons outside this repo ("Deployment failed, try again
       # later", or "No artifacts named github-pages were found" right after a successful upload).  Try up to 3
       # times, waiting between the attempts; the job only fails if all three fail.
