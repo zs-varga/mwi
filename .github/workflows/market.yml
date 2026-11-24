@@ -113,7 +113,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy3.outputs.page_url || steps.deploy2.outputs.page_url || steps.deploy1.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
 
@@ -125,9 +125,30 @@ jobs:
           cp market_watch/index.html site/
           gh release download "$RELEASE_TAG" --pattern "$DASH_ASSET" --dir site
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
-      - id: deploy
-        uses: actions/deploy-pages@v4
+      # GitHub Pages deployments fail now and then for reasons outside this repo ("Deployment failed, try again
+      # later", or "No artifacts named github-pages were found" right after a successful upload).  Try up to 3
+      # times, waiting between the attempts; the job only fails if all three fail.
+      - id: deploy1
+        uses: actions/deploy-pages@v5
+        continue-on-error: true
+
+      - name: Wait before deploy retry 2
+        if: steps.deploy1.outcome == 'failure'
+        run: sleep 45
+
+      - id: deploy2
+        if: steps.deploy1.outcome == 'failure'
+        uses: actions/deploy-pages@v5
+        continue-on-error: true
+
+      - name: Wait before deploy retry 3
+        if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
+        run: sleep 90
+
+      - id: deploy3
+        if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
+        uses: actions/deploy-pages@v5
